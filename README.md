@@ -1,209 +1,343 @@
-# Touch-Based Pressure & Tracking System (Velostat Matrix)
+# Braille Reading Analysis System
 
-## Overview
+A low-cost conductive grid-based tactile sensing and analytics platform for real-time Braille reading behavior analysis.
 
-This project implements a **touch and pressure tracking system** using a **Velostat-based resistive matrix**, multiplexers, and an Arduino-class microcontroller. The system scans a grid of pressure-sensitive cells, dynamically calibrates noise, detects touch events reliably, and streams structured data for visualization and analysis on a PC.
+This project combines a custom copper-tape touch sensing matrix with a Python-based analytics pipeline to capture and analyze Braille reading interaction patterns in real time. The system computes multiple behavioral metrics including reading speed, motor consistency, hesitation patterns, path efficiency, and word-level interaction statistics.
 
-The long-term motivation is to build a **robust tactile sensing platform** that can be extended toward applications like **Braille reading assistance, gesture tracking, pressure heatmaps, and human–computer interaction research**.
-
----
-
-## What This Repository Contains
-
-* Firmware for scanning an **8×8 resistive sensor matrix**
-* Dynamic **baseline and noise calibration**
-* Touch detection with **adaptive thresholds**
-* CSV-style serial data streaming
-* PC-side plotting and analysis tools (Python)
-* Documentation of **engineering problems faced and solutions implemented**
+Unlike camera-based or wearable approaches, the system is completely non-invasive and operates without optical tracking or body-mounted sensors.
 
 ---
 
-## Hardware Setup
+# Project Overview
 
-### Components Used
+The system consists of:
 
-* Velostat sheet (pressure-sensitive resistive material)
-* Copper tape / copper strips (row & column electrodes)
-* Arduino-compatible microcontroller
-* Analog multiplexer(s) for row/column scanning
-* Resistors (notably 100kΩ for stability)
-* Jumper wires, breadboard / custom backing
+- A conductive copper-tape sensing grid
+- Analog multiplexing circuitry
+- A microcontroller-based scanning unit
+- A Python analytics and visualization pipeline
+- A calibrated Braille-sheet-to-grid mapping system
 
-### Matrix Structure
-
-* Physical sensor matrix: **8 rows × 8 columns**
-* Logical interpretation layer: **grid mapping for tracking & heatmaps**
-
-Each intersection of a row and column forms a pressure-sensitive cell whose resistance changes under touch.
+The platform detects touch events on a physical Braille reading surface and transforms them into measurable reading-behavior metrics.
 
 ---
 
-## System Architecture
+# Key Features
 
-1. **Row/Column Selection**
-   Multiplexers activate one row and one column at a time.
+## Hardware Features
 
-2. **Analog Sampling**
-   The voltage at the intersection is read via the ADC.
-
-3. **Baseline Calibration**
-   Initial no-touch values are learned and stored.
-
-4. **Noise Profiling**
-   The system records peak-to-peak noise to set safe thresholds.
-
-5. **Touch Detection**
-   A touch is detected when the signal crosses an adaptive threshold above noise.
-
-6. **Tracking & Mapping**
-   Valid touches are mapped into grid coordinates and optionally smoothed.
-
-7. **Data Output**
-   Data is streamed over serial in CSV format for logging and plotting.
+- Custom copper-tape conductive sensing matrix
+- Multi-touch capable architecture
+- Real-time row-column multiplexed scanning
+- Passive conductive touch detection
+- Low-cost scalable design
+- No camera or vision dependency
+- No wearable sensors required
 
 ---
 
-## Firmware Features
+## Software Features
 
-* Dynamic noise learning window (time-based)
-* Per-cell baseline tracking
-* Protection against false positives
-* Stable scanning without burst noise
-* Configurable thresholds and timing constants
+- Real-time touch localization
+- Rolling WPM computation
+- Velocity consistency analysis
+- Hesitation and regression tracking
+- Word-level Time-on-Task analysis
+- Skip-rate and coverage statistics
+- Path efficiency analysis
+- Multi-threaded processing pipeline
+- Live visualization dashboard
 
 ---
 
-## Data Output Format
+# Hardware Architecture
 
-The firmware outputs structured serial data in **CSV-compatible format**, enabling:
+The sensing system is built using a custom conductive copper-tape matrix architecture designed specifically for tactile Braille interaction tracking.
 
-* Offline logging
-* Python-based plotting
-* Velocity, reversal, and zero-crossing analysis
+Each sensing cell in the matrix consists of four copper tape patches arranged to form a touch-sensitive region. Every conductive patch is soldered to row and column wiring traces, forming a multiplexed sensing grid.
 
-Example:
+When a user touches a conductive patch with their finger, the analog multiplexing circuitry detects the resulting signal variation and determines the activated row-column intersection. Using this localization process, the system identifies the exact matrix cell being touched.
 
+A calibrated mapping layer associates each matrix coordinate with a corresponding word position on the physical Braille sheet. Once the touched word is identified, the Python analytics pipeline updates all associated reading metrics in real time.
+
+---
+
+# Touch Localization Workflow
+
+1. User touches conductive copper patch
+2. Analog multiplexers scan row and column lines
+3. Activated intersection is detected
+4. Matrix coordinates are localized
+5. Coordinates are mapped to Braille word positions
+6. Touch event is sent to the Python analytics engine
+7. Metrics and live visualizations are updated
+
+---
+
+# Conductive Grid Design
+
+## Grid Characteristics
+
+- Copper tape-based sensing surface
+- Passive conductive touch detection
+- Multiplexed row-column architecture
+- Real-time touch localization
+- Multi-touch sensing support
+- Low-cost scalable construction
+
+---
+
+# Hardware Components
+
+- Copper tape sensing patches
+- Analog multiplexers
+- Microcontroller board
+- Row-column wiring matrix
+- USB serial communication interface
+- Physical Braille overlay sheet
+
+---
+
+# Mapping Mechanism
+
+The physical Braille reading sheet is aligned with the conductive sensing matrix using a predefined calibration mapping.
+
+Each grid coordinate corresponds to:
+
+- A Braille word position
+- A Braille cell location
+- A metric tracking entry inside the analytics software
+
+This mapping enables the system to transform raw touch coordinates into meaningful reading-behavior data.
+
+---
+
+# Hardware Setup
+
+## Components Required
+
+- Microcontroller board
+- Analog multiplexers
+- Copper tape
+- Wiring connections
+- Braille reading sheet
+- USB cable
+- Host PC running Python analytics software
+
+---
+
+## Setup Procedure
+
+1. Assemble the conductive copper-tape matrix
+2. Connect row and column traces to the analog multiplexers
+3. Upload firmware to the microcontroller
+4. Connect the microcontroller to the host PC via USB
+5. Align the Braille sheet with the sensing grid
+6. Launch the Python analytics software
+7. Begin real-time scanning and visualization
+
+---
+
+# Reference Setup Video
+
+[Reference Vid](https://www.youtube.com/watch?v=u8s9hpjN25Y)
+12:25 - 13:00
+
+---
+
+# Python Analytics Pipeline
+
+The Python backend performs all major computation, event processing, metric extraction, and visualization tasks.
+
+The pipeline operates using a multi-threaded architecture consisting primarily of:
+
+| Thread | Responsibility |
+|---|---|
+| Metrics Thread | Processes incoming sensor frames and updates metric trackers |
+| UI Thread | Renders live visualizations and dashboards |
+
+Thread synchronization is handled using thread-safe snapshot mechanisms protected using locks.
+
+---
+
+# Metrics Implemented
+
+## 1. Rolling Words Per Minute (WPM)
+
+Calculates reading speed over a rolling time window.
+
+### Features
+
+- Real-time computation
+- EMA smoothing
+- Noise reduction
+- Stable trend estimation
+
+---
+
+## 2. Velocity Profile Analysis
+
+Tracks finger movement velocity across touch trajectories.
+
+### Computed Metrics
+
+- Mean velocity
+- Velocity distribution
+- Interquartile Range (IQR)
+- Motor consistency score
+
+### Purpose
+
+- Analyze tactile motor stability
+- Detect learning progression
+- Measure reading smoothness
+
+---
+
+## 3. Hesitation and Regression Analysis
+
+Tracks:
+
+- Repeated word visits
+- Backtracking behavior
+- Hesitation frequency
+
+### Features
+
+- O(1) regression detection
+- Difficulty-word flagging
+- Session-level tracking
+
+---
+
+## 4. Word-Level Time-on-Task (ToT)
+
+Measures cumulative interaction duration for each word.
+
+### Outputs
+
+- Rolling ToT
+- Session ToT
+- 7 × 7 heatmap arrays
+- Difficulty hotspot visualization
+
+---
+
+## 5. Skip Rate and Coverage Analysis
+
+Computes:
+
+- Unvisited words
+- Partial row coverage
+- Reading coverage percentage
+
+### Purpose
+
+- Detect incomplete reading patterns
+- Analyze fatigue-related skipping behavior
+
+---
+
+## 6. Path Efficiency
+
+Measures trajectory efficiency using:
+
+```math
+\eta = \frac{d_{straight}}{d_{actual}}
 ```
-timestamp,row,col,raw_value,delta
-```
+
+where:
+
+- \( d_{straight} \) = straight-line distance
+- \( d_{actual} \) = total traversed path distance
+
+### Purpose
+
+- Analyze movement efficiency
+- Study motor learning progression
+- Measure reading optimization
 
 ---
 
-## Visualization & Analysis
+# Visualization Suite
 
-Python scripts are used to:
+The system includes multiple live visualization panels built using matplotlib.
 
-* Plot raw pressure values
-* Generate heatmaps
-* Detect motion trends (velocity & reversals)
-* Map data to a Braille-like 4×8 logical structure
+## Included Visualizations
 
----
-
-## Problems Faced & Solutions
-
-> This section documents real engineering issues encountered during development and how they were resolved.
-
-### 1. False Touches with No Contact
-
-**Problem:** Random touches were detected even when the surface was untouched.
-
-**Cause:**
-
-* Floating ADC values
-* Insufficient noise margin
-* Over-aggressive thresholds
-
-**Solution:**
-
-* Added long-duration noise learning
-* Increased resistance values for stability
-* Introduced adaptive thresholds based on measured noise
+- WPM trend graphs
+- Velocity profile overlays
+- Regression frequency charts
+- ToT bar plots
+- 3D ToT surfaces
+- Path efficiency scatter plots
+- Skip heatmaps
 
 ---
 
-### 2. No Output After Calibration Changes
+# Technologies Used
 
-**Problem:** Touch detection stopped working entirely.
+## Software Stack
 
-**Cause:**
-
-* Thresholds became higher than actual signal deltas
-
-**Solution:**
-
-* Logged intermediate values
-* Tuned calibration windows
-* Separated noise calibration from touch calibration
+- Python
+- NumPy
+- Matplotlib
+- SciPy
+- StatsModels
+- PySerial
+- Threading
 
 ---
 
-### 3. Continuous Touch Instead of Bursts
+## Hardware Stack
 
-**Problem:** Touches were detected continuously rather than as distinct events.
-
-**Cause:**
-
-* Baseline not updating correctly
-* Slow decay in signal processing
-
-**Solution:**
-
-* Introduced controlled baseline drift handling
-* Added debounce-like logic
+- Copper tape sensing matrix
+- Analog multiplexers
+- Microcontroller platform
+- USB serial communication
 
 ---
 
-*(This section is intentionally expandable as development continues.)*
+# Applications
+
+- Braille reading analysis
+- Accessibility research
+- Tactile interaction studies
+- Reading proficiency assessment
+- Assistive education systems
+- Adaptive Braille tutoring
+- Human-computer interaction research
 
 ---
 
-## Current Project Status
+# Future Improvements
 
-* Core scanning and detection: ✅ Implemented
-* Noise handling & calibration: ✅ Stable
-* Serial data streaming: ✅ Working
-* Visualization tools: ✅ Functional
-* Extended gesture interpretation: 🔄 In progress
-
----
-
-## Future Improvements
-
-* Higher resolution matrix
-* Hardware filtering
-* Interrupt-based scanning
-* Machine learning–based touch classification
-* Dedicated PCB design
+- Multi-hand tracking
+- Wireless communication
+- Larger sensing matrices
+- ML-based proficiency classification
+- Cross-session analytics
+- Adaptive tutoring integration
+- Embedded standalone deployment
 
 ---
 
-## How to Use
+# Authors
 
-1. Assemble the Velostat matrix
-2. Upload the firmware to the microcontroller
-3. Open serial monitor / logger
-4. Run Python scripts for visualization
+## Shreyas S Kulkarni
+iMTech ECE  
+IIIT Bangalore
 
----
+## Heer
+iMTech ECE  
+IIIT Bangalore
 
-## Project Philosophy
+# Citation
 
-This project emphasizes:
-
-* **Engineering robustness over hacks**
-* **Measurable noise-aware design**
-* **Iterative debugging with real data**
+[ Add Citation Information Here ]
 
 ---
 
-## Author
+# Acknowledgements
 
-Developed as an exploratory hardware–software co-design project.
-
----
-
-## License
-
-(To be decided)
+[ Add Acknowledgements Here ]
