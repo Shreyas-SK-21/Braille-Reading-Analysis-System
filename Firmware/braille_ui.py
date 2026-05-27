@@ -248,6 +248,25 @@ EFFICIENCY_PLOT_UPDATE_INTERVAL      = 0.5  # seconds — 2fps throttle
 EFFICIENCY_LOWESS_FRAC               = 0.3  # LOWESS local window fraction
 # ══════════════════════════════════════════════════════════════
 
+# ═══════════════════════ UI THEME ═════════════════════════════
+_BG_DARK       = "#0d1117"   # main background
+_BG_CARD       = "#161b22"   # card/axes background
+_BG_BORDER     = "#30363d"   # card borders
+_FG_PRIMARY    = "#e6edf3"   # bright text
+_FG_MUTED      = "#8b949e"   # muted text
+_ACCENT_BLUE   = "#58a6ff"   # speed metrics
+_ACCENT_GREEN  = "#3fb950"   # accuracy/good
+_ACCENT_ORANGE = "#f0883e"   # difficulty/warning
+_ACCENT_RED    = "#f85149"   # errors/danger
+_GRID_COLOR    = "#21262d"   # grid lines
+
+# Font stack — first available is used
+plt.rcParams['font.family'] = ['Inter', 'Segoe UI', 'SF Pro Display',
+                                'Helvetica Neue', 'sans-serif']
+
+# Active finger view for plot menu: 0 = finger 0, 1 = finger 1, 2 = combined
+_active_finger_view = 2
+# ══════════════════════════════════════════════════════════════
 
 # ═══════════════════════ WORD MAPPING ═════════════════════════
 #
@@ -577,7 +596,7 @@ class WordBoundaryEditor:
             text=(f"Grid has {GRID} columns (0–{GRID-1}).  "
                   "Add/remove words by changing the word count spinbox, "
                   "then click Apply."),
-            font=("Courier New", 9), foreground="#888888",
+            font=("Courier New", 9), foreground=_FG_MUTED,
             background=DARK_BG, wraplength=740, justify="left")
         note.pack(padx=16, pady=(0, 8))
 
@@ -1115,7 +1134,8 @@ def connected_components_4(mask: np.ndarray):
 
 def analyse_touch(delta: np.ndarray) -> dict:
     EMPTY = dict(active=False, peak_rc=None, pressed_count=0,
-                 peak_value=0.0, spread_ratio=0.0, confidence=0.0)
+                 peak_value=0.0, spread_ratio=0.0, confidence=0.0,
+                 peaks=[])
     mask = threshold_mask(delta)
     if mask.sum() < MIN_PRESSED_CELLS:
         return EMPTY
@@ -1123,7 +1143,8 @@ def analyse_touch(delta: np.ndarray) -> dict:
     if not comps:
         return EMPTY
 
-    best, best_score = None, -1e18
+    # Score every component and build a peak info dict for each
+    scored: list = []
     for comp in comps:
         vals     = np.array([delta[r, c] for r, c in comp], dtype=float)
         peak_idx = int(np.argmax(vals))
@@ -1131,17 +1152,26 @@ def analyse_touch(delta: np.ndarray) -> dict:
         total    = float(vals.sum())
         spread   = total / (peak_val + 1e-9)
         score    = peak_val * 2.0 + total * 0.5 - (spread - 1.0) * 2.5
-        if score > best_score:
-            best_score = score
-            best = dict(
-                active=True,
-                peak_rc=comp[peak_idx],
-                pressed_count=len(comp),
-                peak_value=peak_val,
-                spread_ratio=spread,
-                confidence=min(1.0, 1.0 / (spread + 1e-9)),
-            )
-    return best if best else EMPTY
+        scored.append((score, dict(
+            peak_rc=comp[peak_idx],
+            pressed_count=len(comp),
+            peak_value=peak_val,
+            spread_ratio=spread,
+            confidence=min(1.0, 1.0 / (spread + 1e-9)),
+        )))
+
+    # Sort by score descending, keep top 2
+    scored.sort(key=lambda x: x[0], reverse=True)
+    peaks = [info for _score, info in scored[:2]]
+
+    if not peaks:
+        return EMPTY
+
+    # Legacy single-peak fields from the best component (backward compat)
+    result = dict(peaks[0])
+    result["active"] = True
+    result["peaks"]  = peaks
+    return result
 
 
 # ─────────────────────── Peak lock ────────────────────────────
@@ -1823,12 +1853,12 @@ class BarChartBlit:
         x_pos   = np.arange(n_words)
 
         # ── Create figure and axes ────────────────────────────
-        self.fig = plt.figure(figsize=(14, 5), facecolor="#111111")
+        self.fig = plt.figure(figsize=(14, 5), facecolor=_BG_DARK)
         self.ax_left  = self.fig.add_subplot(111)
         self.ax_right = self.ax_left.twinx()
 
-        self.ax_left.set_facecolor("#111111")
-        self.fig.patch.set_facecolor("#111111")
+        self.ax_left.set_facecolor(_BG_DARK)
+        self.fig.patch.set_facecolor(_BG_DARK)
 
         # ── tab10 palette by row ──────────────────────────────
         tab10 = plt.cm.tab10
@@ -1897,12 +1927,12 @@ class BarChartBlit:
         self.ax_left.set_xticks(x_pos)
         self.ax_left.set_xticklabels(
             self.word_list, rotation=45, ha='right',
-            fontsize=7, color='#aaaaaa'
+            fontsize=7, color=_FG_MUTED
         )
-        self.ax_left.set_ylabel('Time-on-Task (s)', color='#dddddd', fontsize=9)
-        self.ax_right.set_ylabel('Touch Count', color='#dddddd', fontsize=9)
-        self.ax_left.tick_params(axis='y', colors='#888888')
-        self.ax_right.tick_params(axis='y', colors='#888888')
+        self.ax_left.set_ylabel('Time-on-Task (s)', color=_FG_PRIMARY, fontsize=9)
+        self.ax_right.set_ylabel('Touch Count', color=_FG_PRIMARY, fontsize=9)
+        self.ax_left.tick_params(axis='y', colors=_FG_MUTED)
+        self.ax_right.tick_params(axis='y', colors=_FG_MUTED)
         self.ax_left.set_title(
             'Per-Word Performance  (Time-on-Task & Touch Counts)',
             color='white', fontsize=11, fontweight='bold', pad=10
@@ -1912,13 +1942,13 @@ class BarChartBlit:
         self.ax_right.set_ylim(0, 1.0)
 
         # Grid
-        self.ax_left.grid(axis='y', color='#2a2a2a', linewidth=0.5, alpha=0.5)
+        self.ax_left.grid(axis='y', color=_GRID_COLOR, linewidth=0.5, alpha=0.5)
 
         # Spines
         for sp in self.ax_left.spines.values():
-            sp.set_edgecolor('#2a2a2a')
+            sp.set_edgecolor(_GRID_COLOR)
         for sp in self.ax_right.spines.values():
-            sp.set_edgecolor('#2a2a2a')
+            sp.set_edgecolor(_GRID_COLOR)
 
         self.fig.tight_layout()
 
@@ -2294,8 +2324,8 @@ class RegressionBarChart:
     # ── Colour palette ────────────────────────────────────────
     COLOR_FLAGGED = "#ff4444"     # red — word exceeded threshold
     COLOR_NORMAL  = "#4488ff"     # blue — below threshold
-    COLOR_BG      = "#111111"     # figure/axes background
-    COLOR_TEXT    = "#dddddd"     # annotation text
+    COLOR_BG      = _BG_DARK     # figure/axes background
+    COLOR_TEXT    = _FG_PRIMARY     # annotation text
     COLOR_EMPTY   = "#666666"     # placeholder text when no data
 
     def __init__(self):
@@ -2320,7 +2350,7 @@ class RegressionBarChart:
             "Most-Regressed Words  (inter-word regressions)",
             color="white", fontsize=11, fontweight="bold", pad=10
         )
-        self.ax.set_xlabel("Regression count", color="#999999", fontsize=9)
+        self.ax.set_xlabel("Regression count", color=_FG_MUTED, fontsize=9)
         self.ax.text(
             0.5, 0.5, "No regressions recorded yet",
             transform=self.ax.transAxes,
@@ -2330,7 +2360,7 @@ class RegressionBarChart:
         )
         self.ax.tick_params(colors="#777777")
         for sp in self.ax.spines.values():
-            sp.set_edgecolor("#2a2a2a")
+            sp.set_edgecolor(_GRID_COLOR)
 
         self.fig.tight_layout()
         self._setup_done = True
@@ -2444,7 +2474,7 @@ class RegressionBarChart:
 
         # X-axis styling
         ax.set_xlim(0, max(1, max_count * 1.15))
-        ax.grid(axis="x", color="#2a2a2a", linewidth=0.5, alpha=0.5)
+        ax.grid(axis="x", color=_GRID_COLOR, linewidth=0.5, alpha=0.5)
 
         # ── Step 7: Labels + render ───────────────────────────
         self._apply_labels(ax)
@@ -2455,10 +2485,10 @@ class RegressionBarChart:
             "Most-Regressed Words  (inter-word regressions)",
             color="white", fontsize=11, fontweight="bold", pad=10
         )
-        ax.set_xlabel("Regression count", color="#999999", fontsize=9)
+        ax.set_xlabel("Regression count", color=_FG_MUTED, fontsize=9)
         ax.tick_params(colors="#777777")
         for sp in ax.spines.values():
-            sp.set_edgecolor("#2a2a2a")
+            sp.set_edgecolor(_GRID_COLOR)
         ax.set_facecolor(self.COLOR_BG)
 
         self.fig.canvas.draw_idle()
@@ -2529,10 +2559,10 @@ class Monitor3D:
         self.X, self.Y = np.meshgrid(x, y)
 
         # Create figure and 3D axes
-        self.figure = plt.figure(figsize=(10, 7), facecolor='#111111')
+        self.figure = plt.figure(figsize=(10, 7), facecolor=_BG_DARK)
         self.axes_3d = self.figure.add_subplot(111, projection='3d')
-        self.axes_3d.set_facecolor('#111111')
-        self.figure.patch.set_facecolor('#111111')
+        self.axes_3d.set_facecolor(_BG_DARK)
+        self.figure.patch.set_facecolor(_BG_DARK)
 
         # Plot initial surface (ToT)
         self.current_surf = self.axes_3d.plot_surface(
@@ -2551,14 +2581,14 @@ class Monitor3D:
         self._add_base_labels(word_grid)
 
         # Configure axes
-        self.axes_3d.set_xlabel('Column (0-6)', fontsize=10, color='#cccccc')
-        self.axes_3d.set_ylabel('Row (0-6)', fontsize=10, color='#cccccc')
-        self.axes_3d.set_zlabel('Time-on-Task (sec)', fontsize=10, color='#cccccc')
+        self.axes_3d.set_xlabel('Column (0-6)', fontsize=10, color=_FG_PRIMARY)
+        self.axes_3d.set_ylabel('Row (0-6)', fontsize=10, color=_FG_PRIMARY)
+        self.axes_3d.set_zlabel('Time-on-Task (sec)', fontsize=10, color=_FG_PRIMARY)
         self.axes_3d.set_xlim(0, 6)
         self.axes_3d.set_ylim(0, 6)
 
         # Style 3D axes panes and tick labels
-        self.axes_3d.tick_params(colors='#888888')
+        self.axes_3d.tick_params(colors=_FG_MUTED)
         self.axes_3d.set_title(
             '3D Surface Monitor  [V-6]',
             color='white', fontsize=12, fontweight='bold', pad=15
@@ -2577,7 +2607,7 @@ class Monitor3D:
         )
         # Style the radio button labels
         for label in self._radio.labels:
-            label.set_color('#cccccc')
+            label.set_color(_FG_PRIMARY)
             label.set_fontsize(9)
 
         # Bind callback to toggle_z
@@ -2655,7 +2685,7 @@ class Monitor3D:
             # AXES OBJECT AND VIEW ANGLE PRESERVED ✓
 
         # STEP 2: Update Z-axis label
-        self.axes_3d.set_zlabel(zlabel, fontsize=10, color='#cccccc')
+        self.axes_3d.set_zlabel(zlabel, fontsize=10, color=_FG_PRIMARY)
 
         # STEP 3: Plot new surface
         self.current_surf = self.axes_3d.plot_surface(
@@ -2786,10 +2816,10 @@ class VelocityProfileMonitor:
         Creates the figure, axes, and all persistent Line2D artists.
         Past-event lines are pre-allocated for efficiency.
         """
-        self.figure = plt.figure(figsize=(8, 5), facecolor='#111111')
+        self.figure = plt.figure(figsize=(8, 5), facecolor=_BG_DARK)
         self.axes   = self.figure.add_subplot(111)
-        self.axes.set_facecolor('#111111')
-        self.figure.patch.set_facecolor('#111111')
+        self.axes.set_facecolor(_BG_DARK)
+        self.figure.patch.set_facecolor(_BG_DARK)
 
         # Placeholder lines — most recent event (bold blue)
         self.line_recent, = self.axes.plot(
@@ -2817,20 +2847,20 @@ class VelocityProfileMonitor:
         )
 
         # Labels and styling
-        self.axes.set_xlabel('Step index', fontsize=9, color='#999999')
+        self.axes.set_xlabel('Step index', fontsize=9, color=_FG_MUTED)
         self.axes.set_ylabel('Velocity (cells/sec)', fontsize=9,
-                             color='#999999')
+                             color=_FG_MUTED)
         self.axes.set_title(
             'Velocity Profile — last 20 touches  [V-7]',
             fontsize=11, fontweight='bold', color='white', pad=10
         )
         self.axes.legend(loc='upper right', fontsize=8, framealpha=0.3,
-                         facecolor='#111111', edgecolor='#333333',
-                         labelcolor='#cccccc')
-        self.axes.grid(True, alpha=0.3, color='#2a2a2a')
+                         facecolor=_BG_DARK, edgecolor=_BG_BORDER,
+                         labelcolor=_FG_PRIMARY)
+        self.axes.grid(True, alpha=0.3, color=_GRID_COLOR)
         self.axes.tick_params(colors='#777777')
         for sp in self.axes.spines.values():
-            sp.set_edgecolor('#2a2a2a')
+            sp.set_edgecolor(_GRID_COLOR)
 
         self.figure.tight_layout()
         self._setup_done = True
@@ -3040,7 +3070,7 @@ class EfficiencyPlot:
     COLOR_PROFICIENT  = '#2ca02c'   # green   η ≥ 0.8
     COLOR_DEVELOPING  = '#ff7f0e'   # orange  η ≥ 0.5
     COLOR_STRUGGLING  = '#d62728'   # red     η < 0.5
-    COLOR_BG          = '#111111'
+    COLOR_BG          = _BG_DARK
 
     def __init__(self,
                  lowess_interval: int = EFFICIENCY_LOWESS_RECOMPUTE_INTERVAL,
@@ -3107,9 +3137,9 @@ class EfficiencyPlot:
         )
 
         # Labels and styling
-        self.axes.set_xlabel('Event index', fontsize=9, color='#999999')
+        self.axes.set_xlabel('Event index', fontsize=9, color=_FG_MUTED)
         self.axes.set_ylabel('Path efficiency (η)', fontsize=9,
-                             color='#999999')
+                             color=_FG_MUTED)
         self.axes.set_title(
             'Path Efficiency Over Session  [V-8]',
             fontsize=11, fontweight='bold', color='white', pad=10
@@ -3118,13 +3148,13 @@ class EfficiencyPlot:
         self.axes.set_xlim([0, 10])
         self.axes.legend(
             loc='lower right', fontsize=8, framealpha=0.3,
-            facecolor=self.COLOR_BG, edgecolor='#333333',
-            labelcolor='#cccccc'
+            facecolor=self.COLOR_BG, edgecolor=_BG_BORDER,
+            labelcolor=_FG_PRIMARY
         )
-        self.axes.grid(True, alpha=0.3, color='#2a2a2a')
+        self.axes.grid(True, alpha=0.3, color=_GRID_COLOR)
         self.axes.tick_params(colors='#777777')
         for sp in self.axes.spines.values():
-            sp.set_edgecolor('#2a2a2a')
+            sp.set_edgecolor(_GRID_COLOR)
 
         self.figure.tight_layout()
         self._setup_done = True
@@ -3316,18 +3346,28 @@ class SlidingWindowWPM:
         self._total     = 0                    # always == sum(buckets)
         self._last_slot = int(time.time()) % self.WINDOW
 
-    # ── internal: expire the current slot if the second has ticked ──
+    # ── internal: expire stale slots when seconds have ticked ──
     def _maybe_expire(self, now_slot: int) -> None:
         """
         Called with the lock held.
-        If the second has changed, the slot that now_slot points to
-        belongs to a second that is exactly WINDOW seconds ago — it
-        must be zeroed out and subtracted from the running total.
+        If one or more seconds have elapsed, every intervening slot
+        holds data from ≥60 seconds ago and must be zeroed.  A simple
+        forward walk from last_slot+1 to now_slot (wrapping) clears
+        them all and maintains the running total invariant.
         """
         if now_slot != self._last_slot:
-            self._total            -= self._buckets[now_slot]
-            self._buckets[now_slot] = 0
-            self._last_slot         = now_slot
+            # How many slots have elapsed (wrapping around the ring)
+            steps = (now_slot - self._last_slot) % self.WINDOW
+            if steps >= self.WINDOW:
+                # More than 60s passed — everything is stale
+                self._total   = 0
+                self._buckets = [0] * self.WINDOW
+            else:
+                for i in range(1, steps + 1):
+                    idx = (self._last_slot + i) % self.WINDOW
+                    self._total        -= self._buckets[idx]
+                    self._buckets[idx]  = 0
+            self._last_slot = now_slot
 
     def record_touch(self) -> None:
         """
@@ -3517,6 +3557,28 @@ monitor_3d       = Monitor3D()                # V-6
 vel_profile      = VelocityProfileMonitor()    # V-7
 eff_plot         = EfficiencyPlot()             # V-8
 
+# ── Per-finger tracker sets (butterfly dual-finger tracking) ──
+finger_trackers = [
+    {  # finger 0
+        "perf": PerformanceMetrics(),
+        "word_stats": WordStatsTracker(),
+        "velocity": VelocityTracker(),
+        "ewiqr": EWIQRPerWordTracker(),
+        "welford": WelfordPerWord(),
+        "wpm_trend": WPMTrendTracker(),
+        "cell_diff": CellDifficultyTracker(),
+    },
+    {  # finger 1
+        "perf": PerformanceMetrics(),
+        "word_stats": WordStatsTracker(),
+        "velocity": VelocityTracker(),
+        "ewiqr": EWIQRPerWordTracker(),
+        "welford": WelfordPerWord(),
+        "wpm_trend": WPMTrendTracker(),
+        "cell_diff": CellDifficultyTracker(),
+    },
+]
+
 # ── B4: Pre-allocated numpy buffers for in-place ops ──────────
 _raw_delta_buf = np.zeros((GRID, GRID), dtype=float)
 _thresh_buf    = np.zeros((GRID, GRID), dtype=float)
@@ -3531,6 +3593,11 @@ _cached_vt          = None  # velocity_tracker.snapshot()
 _cached_skip_snap   = None  # compute_skip_stats()
 _cached_diff_snap   = None  # cell_diff.snapshot()
 _cached_wb_snap     = None  # word_boundaries deep copy
+
+# Per-finger snapshot caches
+_cached_finger_snaps = [None, None]  # per-finger perf snapshots
+_cached_finger_vt    = [None, None]  # per-finger velocity snapshots
+_cached_finger_wpm   = [0.0, 0.0]   # per-finger WPM readings
 
 # ── B3: Cached metrics text to avoid rebuild every frame ──────
 _prev_metrics_text  = ""
@@ -3560,216 +3627,318 @@ def reader_thread():
             pass
 
 
+class FingerState:
+    """Per-finger touch tracking state for butterfly dual-finger reading."""
+    __slots__ = (
+        "fid", "touching", "touch_start", "release_streak",
+        "path_pts", "logical_seq", "first_peak_val", "first_peak_logic",
+        "current_word", "lock",
+        "cont_path_pts", "cont_logical_seq", "cont_touch_start",
+    )
+
+    def __init__(self, fid: int):
+        self.fid              = fid
+        self.touching         = False
+        self.touch_start      = 0.0
+        self.release_streak   = 0
+        self.path_pts: list   = []
+        self.logical_seq: list = []
+        self.first_peak_val   = 0.0
+        self.first_peak_logic = None
+        self.current_word     = ""
+        self.lock             = PeakLock()
+        self.cont_path_pts: list    = []
+        self.cont_logical_seq: list = []
+        self.cont_touch_start       = 0.0
+
+    def reset_touch(self):
+        self.touching         = False
+        self.release_streak   = 0
+        self.lock.reset()
+        self.first_peak_logic = None
+        self.current_word     = ""
+
+
+def _assign_peaks_to_fingers(peaks: list, fingers: list) -> list:
+    """
+    Assign up to 2 detected peaks to finger states by proximity.
+
+    Returns a list of (finger_index, peak_info) tuples.
+    Unmatched fingers get no entry (they should increment release_streak).
+    """
+    if not peaks:
+        return []
+
+    n_peaks   = len(peaks)
+    n_fingers = len(fingers)
+
+    if n_peaks == 1:
+        # Single peak → assign to nearest active finger, or finger 0 if none active
+        best_f = 0
+        best_d = float("inf")
+        for fi, f in enumerate(fingers):
+            if f.touching and f.lock.cell is not None:
+                d = manhattan(peaks[0]["peak_rc"], f.lock.cell)
+                if d < best_d:
+                    best_d = d
+                    best_f = fi
+        return [(best_f, peaks[0])]
+
+    # 2+ peaks → greedy nearest-lock assignment
+    assignments = []
+    used_fingers = set()
+    used_peaks   = set()
+
+    # First pass: assign peaks to active fingers by nearest distance
+    for fi, f in enumerate(fingers):
+        if not f.touching or f.lock.cell is None:
+            continue
+        best_pi, best_d = -1, float("inf")
+        for pi, pk in enumerate(peaks[:2]):
+            if pi in used_peaks:
+                continue
+            d = manhattan(pk["peak_rc"], f.lock.cell)
+            if d < best_d:
+                best_d = d
+                best_pi = pi
+        if best_pi >= 0:
+            assignments.append((fi, peaks[best_pi]))
+            used_fingers.add(fi)
+            used_peaks.add(best_pi)
+
+    # Second pass: assign remaining peaks to unused fingers
+    for pi, pk in enumerate(peaks[:2]):
+        if pi in used_peaks:
+            continue
+        for fi in range(n_fingers):
+            if fi not in used_fingers:
+                assignments.append((fi, pk))
+                used_fingers.add(fi)
+                used_peaks.add(pi)
+                break
+
+    return assignments
+
+
 def metrics_thread():
     """
-    Touch state machine:
-      IDLE     → active touch detected              → TOUCHING
-      TOUCHING → large confirmed jump (new block)   → finalise old event,
-                                                       start new event instantly
-      TOUCHING → release_streak ≥ threshold         → IDLE (finalise event)
+    Dual-finger touch state machine for butterfly braille reading.
 
-    KEY FIX: PeakLock.update() now returns a (cell, jumped) tuple.
-    When jumped=True the finger is confirmed on a NEW block while the
-    sensor is still pressed — we close the old TouchEvent and open a
-    fresh one immediately, so every block touched registers correctly
-    even without lifting the finger between them.
+    Two independent FingerState objects track separate touch points.
+    Each finger has its own PeakLock, path tracking, and touch lifecycle.
+    Detected peaks are assigned to fingers by proximity each frame.
 
-    live_word is driven from the RAW analysis peak (not the locked cell)
-    so the "Word now" display updates the instant the finger moves,
-    with zero PeakLock latency.
+    Both per-finger AND combined metric trackers are updated on each
+    touch finalisation, enabling per-finger and session-level analysis.
 
-    WPM NOTE: perf.record() now internally calls
-    SlidingWindowWPM.record_touch() every time a TouchEvent is
-    finalised — no extra call needed here.
+    Single-finger usage: finger 1 stays permanently idle — behavior
+    is identical to the original single-finger implementation.
     """
     det_smooth   = np.zeros((GRID, GRID))
     initialized  = False
 
-    touching          = False
-    touch_start       = 0.0
-    release_streak    = 0
-    path_pts: list    = []
-    logical_seq: list = []
-    first_peak_val    = 0.0
-    first_peak_logic  = None
-    current_word      = ""
-    lock              = PeakLock()
+    fingers = [FingerState(0), FingerState(1)]
 
-    # ── Continuous-contact path tracking ──────────────────────
-    # These accumulate across word-boundary splits within one
-    # press→release cycle.  V-7 and V-8 are fed from these on
-    # actual lift-off so they reflect the FULL finger movement.
-    cont_path_pts: list     = []
-    cont_logical_seq: list  = []    # logical (row, col) cells for backtrack detection
-    cont_touch_start: float = 0.0
+    # ── helper: build and record a completed TouchEvent for finger fi ──
+    def _finalise_touch(fi: int, touch_end: float):
+        f = fingers[fi]
+        ft = finger_trackers[fi]
 
-    # ── helper: build and record a completed TouchEvent ───────
-    def _finalise_touch(touch_end: float):
-        nonlocal path_pts, logical_seq, first_peak_val, first_peak_logic
-
-        duration = touch_end - touch_start
-        pl  = path_length(path_pts)
-        sl  = straight_line(path_pts)
+        duration = touch_end - f.touch_start
+        pl  = path_length(f.path_pts)
+        sl  = straight_line(f.path_pts)
         eff = (sl / pl) if pl > 1e-6 else 1.0
-        bt  = count_backtracks(logical_seq)
+        bt  = count_backtracks(f.logical_seq)
 
-        vels = compute_velocity_profile(path_pts, duration)
+        vels = compute_velocity_profile(f.path_pts, duration)
+
+        # Record to per-finger AND combined velocity trackers
+        ft["velocity"].record(vels)
         velocity_tracker.record(vels)
 
-        # NOTE: V-7 (velocity profile) and V-8 (path efficiency) are
-        # NO LONGER fed here.  They are fed from the continuous-contact
-        # path on actual lift-off — see _finalise_continuous_path().
-        rev  = count_reversals(logical_seq)
+        rev  = count_reversals(f.logical_seq)
         zc   = count_zero_crossings(vels)
 
-        # Session-level word reversal: detect A→B→A pattern across events.
-        # word_stats._touch_seq holds the sequence BEFORE this event.
+        # Session-level word reversal from combined word_stats
         with word_stats._lock:
             _seq_snap = list(word_stats._touch_seq)
         _current_word_str = (
-            get_word_from_touch(first_peak_logic[0], first_peak_logic[1])
-            if first_peak_logic else ""
+            get_word_from_touch(f.first_peak_logic[0], f.first_peak_logic[1])
+            if f.first_peak_logic else ""
         ) or ""
         wrev = count_word_reversals(_seq_snap, _current_word_str)
 
-        # ── Word group completion check ───────────────────────
-        # For multi-block words, verify that all columns in the word's
-        # range have been visited in the touch path.  This is a quality
-        # signal — registration still proceeds on lift-off even if
-        # not all blocks were detected (copper tape makes this rare).
-        _row = first_peak_logic[0] if first_peak_logic else -1
+        # Word group completion check
+        _row = f.first_peak_logic[0] if f.first_peak_logic else -1
         blocks_complete = word_group_accum.check_complete(
-            _row, _current_word_str, logical_seq)
+            _row, _current_word_str, f.logical_seq)
 
         d = difficulty_score(rev, zc, vels, word_reversals=wrev)
 
-        registered_word = word_stats.register(
-            first_peak_logic[0] if first_peak_logic else -1,
-            first_peak_logic[1] if first_peak_logic else -1,
-            difficulty=d,
-        )
+        # Register in BOTH per-finger and combined word_stats
+        _r = f.first_peak_logic[0] if f.first_peak_logic else -1
+        _c = f.first_peak_logic[1] if f.first_peak_logic else -1
+        registered_word = word_stats.register(_r, _c, difficulty=d)
+        ft["word_stats"].register(_r, _c, difficulty=d)
 
-        # perf.record() calls SlidingWindowWPM.record_touch() internally,
-        # registering this word in the O(1) circular WPM counter.
-        perf.record(TouchEvent(
+        evt = TouchEvent(
             timestamp=touch_end,
             duration=duration,
             path_length_val=pl,
             efficiency=eff,
             backtracks=bt,
-            peak_value=first_peak_val,
-            cells_visited=len(logical_seq),
+            peak_value=f.first_peak_val,
+            cells_visited=len(f.logical_seq),
             reversals=rev,
             zero_crossings=zc,
             difficulty=d,
             word_label=registered_word or "",
             blocks_complete=blocks_complete,
-        ), word_reversal=wrev)
-        cell_diff.record(first_peak_logic, d)
+        )
 
-        # M-D2: record touch duration for EWIQR + Welford per-word tracking
+        # Record to BOTH per-finger and combined perf trackers
+        perf.record(evt, word_reversal=wrev)
+        ft["perf"].record(TouchEvent(
+            timestamp=touch_end, duration=duration,
+            path_length_val=pl, efficiency=eff, backtracks=bt,
+            peak_value=f.first_peak_val, cells_visited=len(f.logical_seq),
+            reversals=rev, zero_crossings=zc, difficulty=d,
+            word_label=registered_word or "", blocks_complete=blocks_complete,
+        ), word_reversal=wrev)
+
+        cell_diff.record(f.first_peak_logic, d)
+        ft["cell_diff"].record(f.first_peak_logic, d)
+
+        # EWIQR + Welford per-word tracking (both per-finger and combined)
         if registered_word:
             ewiqr_tracker.record(registered_word, duration)
             welford_per_word.record(registered_word, duration)
+            ft["ewiqr"].record(registered_word, duration)
+            ft["welford"].record(registered_word, duration)
 
     # ── helper: finalise continuous-contact path on actual lift-off ──
-    def _finalise_continuous_path(touch_end: float):
-        """
-        Compute path efficiency and velocity from the FULL press→release
-        path (spanning all word-boundary sub-events) and feed V-7 + V-8.
-        Also compute backtracks from the full continuous logical cell
-        sequence and add to the cumulative session counter.
-        """
-        nonlocal cont_path_pts, cont_logical_seq, cont_touch_start
+    def _finalise_continuous_path(fi: int, touch_end: float):
+        f = fingers[fi]
 
-        # ── Backtrack detection from full continuous contact ───
-        # count_backtracks checks if any cell in the sequence was
-        # visited earlier in the same press→release — i.e., the
-        # finger retraced to a cell it already passed through.
-        bt = count_backtracks(cont_logical_seq)
+        bt = count_backtracks(f.cont_logical_seq)
         perf.add_contact_backtracks(bt)
+        finger_trackers[fi]["perf"].add_contact_backtracks(bt)
 
-        cont_duration = touch_end - cont_touch_start
+        cont_duration = touch_end - f.cont_touch_start
         if cont_duration < 1e-9:
             cont_duration = 1e-9
 
-        if len(cont_path_pts) >= 3:
-            # Only record path efficiency for multi-cell movements
-            # (≥3 distinct positions needed for a meaningful non-1.0 value)
-            cont_pl  = path_length(cont_path_pts)
-            cont_sl  = straight_line(cont_path_pts)
+        if len(f.cont_path_pts) >= 3:
+            cont_pl  = path_length(f.cont_path_pts)
+            cont_sl  = straight_line(f.cont_path_pts)
             cont_eff = (cont_sl / cont_pl) if cont_pl > 1e-6 else 1.0
-            cont_vels = compute_velocity_profile(cont_path_pts, cont_duration)
-
-            # V-8: Path efficiency from full contact
+            cont_vels = compute_velocity_profile(f.cont_path_pts, cont_duration)
             eff_plot.on_event_recorded(cont_eff, perf._total, touch_end)
-
-            # V-7: Velocity profile from full contact
             vel_profile.on_frame(cont_vels, touch_end)
-        elif len(cont_path_pts) == 2:
-            # Two-point path: always η=1.0 (straight line by definition)
-            # Record for velocity but skip trivial efficiency
-            cont_vels = compute_velocity_profile(cont_path_pts, cont_duration)
+        elif len(f.cont_path_pts) == 2:
+            cont_vels = compute_velocity_profile(f.cont_path_pts, cont_duration)
             vel_profile.on_frame(cont_vels, touch_end)
-        # Single-cell taps: skip entirely (no meaningful path or velocity)
 
-        # Reset for next contact
-        cont_path_pts    = []
-        cont_logical_seq = []
-        cont_touch_start = 0.0
+        f.cont_path_pts    = []
+        f.cont_logical_seq = []
+        f.cont_touch_start = 0.0
 
     # ── helper: initialise state for a fresh touch event ──────
-    def _start_touch(peak_rc, peak_value: float, is_new_contact: bool = True):
-        nonlocal touching, touch_start, release_streak
-        nonlocal path_pts, logical_seq, first_peak_val, first_peak_logic, current_word
-        nonlocal cont_path_pts, cont_logical_seq, cont_touch_start
+    def _start_touch(fi: int, peak_rc, peak_value: float,
+                     is_new_contact: bool = True):
+        f = fingers[fi]
 
-        touching         = True
-        touch_start      = time.time()
-        release_streak   = 0
-        path_pts         = []
-        logical_seq      = []
-        first_peak_val   = peak_value
-        first_peak_logic = None
-        current_word     = ""
+        f.touching         = True
+        f.touch_start      = time.time()
+        f.release_streak   = 0
+        f.path_pts         = []
+        f.logical_seq      = []
+        f.first_peak_val   = peak_value
+        f.first_peak_logic = None
+        f.current_word     = ""
 
-        # Only reset continuous path on a genuine new finger contact,
-        # NOT on word-boundary or jump sub-splits.
         if is_new_contact:
-            cont_path_pts    = []
-            cont_logical_seq = []
-            cont_touch_start = time.time()
+            f.cont_path_pts    = []
+            f.cont_logical_seq = []
+            f.cont_touch_start = time.time()
 
-        lock.reset(peak_rc)
-        if lock.cell is not None:
-            raw_r, raw_c     = lock.cell
+        f.lock.reset(peak_rc)
+        if f.lock.cell is not None:
+            raw_r, raw_c     = f.lock.cell
             lr, lc           = raw_r, map_tx_col(raw_c)
-            first_peak_logic = (lr, lc)
-            logical_seq.append((lr, lc))
-            path_pts.append((lc + 0.5, lr + 0.5))
-            # Add to continuous path (dedup consecutive identical)
+            f.first_peak_logic = (lr, lc)
+            f.logical_seq.append((lr, lc))
+            f.path_pts.append((lc + 0.5, lr + 0.5))
             _pt = (lc + 0.5, lr + 0.5)
-            if not cont_path_pts or cont_path_pts[-1] != _pt:
-                cont_path_pts.append(_pt)
-            # Add to continuous logical sequence (dedup consecutive identical)
-            if not cont_logical_seq or cont_logical_seq[-1] != (lr, lc):
-                cont_logical_seq.append((lr, lc))
-            current_word = get_word_from_touch(lr, lc) or ""
+            if not f.cont_path_pts or f.cont_path_pts[-1] != _pt:
+                f.cont_path_pts.append(_pt)
+            if not f.cont_logical_seq or f.cont_logical_seq[-1] != (lr, lc):
+                f.cont_logical_seq.append((lr, lc))
+            f.current_word = get_word_from_touch(lr, lc) or ""
+
+    # ── helper: process one frame for a specific finger ───────
+    def _process_finger(fi: int, peak_info: dict):
+        """Handle touch state machine for one finger given its assigned peak."""
+        f = fingers[fi]
+
+        if not f.touching:
+            # IDLE → start new touch
+            _start_touch(fi, peak_info["peak_rc"], peak_info["peak_value"],
+                         is_new_contact=True)
+        else:
+            # TOUCHING → update with new peak
+            f.release_streak = 0
+            locked, jumped = f.lock.update(peak_info["peak_rc"])
+
+            if locked is not None:
+                raw_r, raw_c = locked
+                lr, lc       = raw_r, map_tx_col(raw_c)
+
+                if jumped:
+                    _old_word = (get_word_from_touch(
+                        f.first_peak_logic[0], f.first_peak_logic[1])
+                        if f.first_peak_logic else "")
+                    _new_word = get_word_from_touch(lr, lc) or ""
+                    if _new_word and _new_word != _old_word:
+                        _finalise_touch(fi, time.time())
+                        _start_touch(fi, locked, peak_info["peak_value"],
+                                     is_new_contact=False)
+                    else:
+                        if not f.logical_seq or f.logical_seq[-1] != (lr, lc):
+                            f.logical_seq.append((lr, lc))
+                            f.path_pts.append((lc + 0.5, lr + 0.5))
+                            _pt = (lc + 0.5, lr + 0.5)
+                            if not f.cont_path_pts or f.cont_path_pts[-1] != _pt:
+                                f.cont_path_pts.append(_pt)
+                            if not f.cont_logical_seq or f.cont_logical_seq[-1] != (lr, lc):
+                                f.cont_logical_seq.append((lr, lc))
+                else:
+                    if not f.logical_seq or f.logical_seq[-1] != (lr, lc):
+                        f.logical_seq.append((lr, lc))
+                        f.path_pts.append((lc + 0.5, lr + 0.5))
+                        _pt = (lc + 0.5, lr + 0.5)
+                        if not f.cont_path_pts or f.cont_path_pts[-1] != _pt:
+                            f.cont_path_pts.append(_pt)
+                        if not f.cont_logical_seq or f.cont_logical_seq[-1] != (lr, lc):
+                            f.cont_logical_seq.append((lr, lc))
+                    new_word = get_word_from_touch(lr, lc) or ""
+                    if (f.first_peak_logic is not None and new_word
+                            and new_word != (
+                                get_word_from_touch(
+                                    f.first_peak_logic[0],
+                                    f.first_peak_logic[1]) or "")):
+                        _finalise_touch(fi, time.time())
+                        _start_touch(fi, locked, peak_info["peak_value"],
+                                     is_new_contact=False)
+                    else:
+                        f.current_word = new_word
 
     # ── main loop ─────────────────────────────────────────────
+    live_word = ""   # initialised before loop to avoid UnboundLocalError on first frame
     while True:
         try:
-            frame = frame_q.get(timeout=0.05)  # C1: faster wakeup
+            frame = frame_q.get(timeout=0.05)
         except queue.Empty:
-            # Guard: if stuck touching for too long, force-finalise
-            if touching and (time.time() - touch_start) > MAX_TOUCH_DURATION_S:
-                touching = False
-                _finalise_touch(time.time())
-                _finalise_continuous_path(time.time())
-                lock.reset()
-                release_streak   = 0
-                first_peak_logic = None
-                current_word     = ""
             continue
 
         raw_delta = np.maximum(frame - baseline, 0.0)
@@ -3780,127 +3949,83 @@ def metrics_thread():
             det_smooth = ((1.0 - DETECT_SMOOTH_ALPHA) * det_smooth
                           + DETECT_SMOOTH_ALPHA * raw_delta)
 
-        info      = analyse_touch(det_smooth)
-        touch_now = info["active"]
+        info  = analyse_touch(det_smooth)
+        peaks = info.get("peaks", [])
 
-        # ── Drive "Word now" from the RAW peak — no lock latency ──
-        # live_word is ALWAYS derived from the raw analysis peak when
-        # touch is active.  Never overwrite it with current_word (which
-        # tracks the locked cell for event bookkeeping).  This ensures
-        # the "Word now" display updates the instant the finger moves.
-        if touch_now and info["peak_rc"] is not None:
-            _rr, _rc  = info["peak_rc"]
-            live_word = get_word_from_touch(_rr, map_tx_col(_rc)) or ""
-            # Track raw peak in continuous path every frame for rich path data
-            if touching:
+        # ── Assign detected peaks to fingers by proximity ─────
+        assignments = _assign_peaks_to_fingers(peaks, fingers)
+        assigned_fingers = {fi for fi, _ in assignments}
+
+        # ── Drive live_word from raw peaks ────────────────────
+        # Build a combined live_word string showing both fingers
+        _live_words = ["", ""]
+        for fi, pk in assignments:
+            _rr, _rc = pk["peak_rc"]
+            _live_words[fi] = get_word_from_touch(_rr, map_tx_col(_rc)) or ""
+            # Track raw peak in continuous path
+            f = fingers[fi]
+            if f.touching:
                 _raw_lc = map_tx_col(_rc)
                 _raw_pt = (_raw_lc + 0.5, _rr + 0.5)
-                if not cont_path_pts or cont_path_pts[-1] != _raw_pt:
-                    cont_path_pts.append(_raw_pt)
-                # Track logical cell in continuous sequence for backtrack detection
-                if not cont_logical_seq or cont_logical_seq[-1] != (_rr, _raw_lc):
-                    cont_logical_seq.append((_rr, _raw_lc))
-        elif touching:
-            # Still touching but no clear peak this frame — keep last
-            # raw-peak word rather than reverting to locked word.
-            pass  # live_word unchanged from previous frame
-        else:
+                if not f.cont_path_pts or f.cont_path_pts[-1] != _raw_pt:
+                    f.cont_path_pts.append(_raw_pt)
+                if not f.cont_logical_seq or f.cont_logical_seq[-1] != (_rr, _raw_lc):
+                    f.cont_logical_seq.append((_rr, _raw_lc))
+
+        # Build display string
+        if _live_words[0] and _live_words[1]:
+            live_word = f"{_live_words[0]} | {_live_words[1]}"
+        elif _live_words[0]:
+            live_word = _live_words[0]
+        elif _live_words[1]:
+            live_word = _live_words[1]
+        elif not any(f.touching for f in fingers):
             live_word = ""
+        # else: keep previous live_word (touching but no clear peak)
 
-        if not touching:
-            if touch_now:
-                _start_touch(info["peak_rc"], info["peak_value"],
-                             is_new_contact=True)
+        # ── Process assigned peaks ────────────────────────────
+        for fi, pk in assignments:
+            _process_finger(fi, pk)
 
-        else:  # ── currently TOUCHING ────────────────────────────────
-            if touch_now:
-                release_streak = 0
-                locked, jumped = lock.update(info["peak_rc"])
+        # ── Handle unassigned fingers (release streak) ────────
+        for fi, f in enumerate(fingers):
+            if fi not in assigned_fingers and f.touching:
+                f.release_streak += 1
 
-                if locked is not None:
-                    raw_r, raw_c = locked
-                    lr, lc       = raw_r, map_tx_col(raw_c)
+            # Finalise on sufficient silence or stuck
+            if f.touching:
+                stuck = (time.time() - f.touch_start) > MAX_TOUCH_DURATION_S
+                if f.release_streak >= RELEASE_FRAMES_NEEDED or stuck:
+                    f.touching = False
+                    _now = time.time()
+                    _finalise_touch(fi, _now)
+                    _finalise_continuous_path(fi, _now)
+                    f.reset_touch()
 
-                    if jumped:
-                        # Check if the jump stays within the same word
-                        # (e.g., sliding across blocks of a multi-block word).
-                        # Only finalise if the jump crosses a word boundary.
-                        _old_word = (get_word_from_touch(
-                            first_peak_logic[0], first_peak_logic[1])
-                            if first_peak_logic else "")
-                        _new_word = get_word_from_touch(lr, lc) or ""
-                        if _new_word and _new_word != _old_word:
-                            _finalise_touch(time.time())
-                            _start_touch(locked, info["peak_value"],
-                                         is_new_contact=False)
-                        else:
-                            # Same word — absorb the jump, update path
-                            if not logical_seq or logical_seq[-1] != (lr, lc):
-                                logical_seq.append((lr, lc))
-                                path_pts.append((lc + 0.5, lr + 0.5))
-                                _pt = (lc + 0.5, lr + 0.5)
-                                if not cont_path_pts or cont_path_pts[-1] != _pt:
-                                    cont_path_pts.append(_pt)
-                                if not cont_logical_seq or cont_logical_seq[-1] != (lr, lc):
-                                    cont_logical_seq.append((lr, lc))
-                        # live_word already set from raw peak above
-
-                    else:
-                        if not logical_seq or logical_seq[-1] != (lr, lc):
-                            logical_seq.append((lr, lc))
-                            path_pts.append((lc + 0.5, lr + 0.5))
-                            # Also track in continuous path
-                            _pt = (lc + 0.5, lr + 0.5)
-                            if not cont_path_pts or cont_path_pts[-1] != _pt:
-                                cont_path_pts.append(_pt)
-                            # Track logical cell in continuous sequence
-                            if not cont_logical_seq or cont_logical_seq[-1] != (lr, lc):
-                                cont_logical_seq.append((lr, lc))
-                        new_word = get_word_from_touch(lr, lc) or ""
-                        # FIX 1: Detect word boundary crossing within the same
-                        # touch even when Manhattan distance < NEW_BLOCK_JUMP_THRESHOLD.
-                        # The display (live_word) already shows the new word; now
-                        # ensure the OLD word is registered before switching.
-                        if (first_peak_logic is not None and new_word
-                                and new_word != (
-                                    get_word_from_touch(
-                                        first_peak_logic[0],
-                                        first_peak_logic[1]) or "")):
-                            _finalise_touch(time.time())
-                            _start_touch(locked, info["peak_value"],
-                                         is_new_contact=False)
-                        else:
-                            current_word = new_word
-
-            else:
-                release_streak += 1
-
-            # Finalise on sufficient silence OR if stuck beyond max duration
-            stuck = touching and (time.time() - touch_start) > MAX_TOUCH_DURATION_S
-            if release_streak >= RELEASE_FRAMES_NEEDED or stuck:
-                touching = False
-                _now = time.time()
-                _finalise_touch(_now)
-                _finalise_continuous_path(_now)
-                lock.reset()
-                release_streak   = 0
-                first_peak_logic = None
-                current_word     = ""
+        # ── Update live status (aggregated across fingers) ────
+        any_touching    = any(f.touching for f in fingers)
+        total_pressed   = sum(pk.get("pressed_count", 0) for _, pk in assignments)
+        best_peak_value = max((pk.get("peak_value", 0.0) for _, pk in assignments), default=0.0)
 
         perf.update_live(dict(
-            is_touching=touching,
-            pressed_cells=info["pressed_count"],
-            peak_value=info["peak_value"],
+            is_touching=any_touching,
+            pressed_cells=total_pressed if assignments else info["pressed_count"],
+            peak_value=best_peak_value if assignments else info["peak_value"],
             spread_ratio=info["spread_ratio"],
             confidence=info["confidence"],
             max_delta=float(det_smooth.max()),
             current_word=live_word,
         ))
 
-        # ── V-4: Feed current WPM into trend tracker ──────────
-        # SlidingWindowWPM.get_wpm() is O(1) — safe to call every frame.
+        # ── V-4: Feed current WPM into trend trackers ─────────
         current_wpm = float(perf._wpm_counter.get_wpm())
         wpm_trend.on_frame(current_wpm, time.time())
+
+        # Per-finger WPM trend
+        for fi in range(2):
+            _fi_wpm = float(finger_trackers[fi]["perf"]._wpm_counter.get_wpm())
+            finger_trackers[fi]["wpm_trend"].on_frame(_fi_wpm, time.time())
+            _cached_finger_wpm[fi] = _fi_wpm
 
 
 threading.Thread(target=reader_thread,  daemon=True, name="reader").start()
@@ -3910,8 +4035,8 @@ threading.Thread(target=metrics_thread, daemon=True, name="metrics").start()
 # ═══════════════════════════ VISUALISATION ════════════════════
 
 _cmap = LinearSegmentedColormap.from_list(
-    "touch",
-    [(0, 0, 0), (0.45, 0, 0), (1, 0.35, 0), (1, 1, 0.55)],
+    "touch_modern",
+    [_BG_DARK, "#1a1040", "#4c1d95", "#dc2626", "#f97316", "#fbbf24", "#fef3c7"],
     N=256,
 )
 
@@ -3981,10 +4106,10 @@ def _make_plot_ax(rect=None):
     """Add (or replace) the main plot axes in fig_menu."""
     if rect is None:
         rect = [_PLOT_LEFT, 0.08, 1.0 - _PLOT_LEFT - 0.02, 0.88]
-    ax = fig_menu.add_axes(rect, facecolor="#111111")
+    ax = fig_menu.add_axes(rect, facecolor=_BG_DARK)
     ax.tick_params(colors="#777777")
     for sp in ax.spines.values():
-        sp.set_edgecolor("#2a2a2a")
+        sp.set_edgecolor(_GRID_COLOR)
     return ax
 
 # ── lazy-init flags — each plot is set up ONCE on first selection
@@ -4085,7 +4210,7 @@ def _init_plot(idx: int):
         # Use a wide axes for the bar chart
         _ax_l = fig_menu.add_axes(
             [_PLOT_LEFT, 0.18, 1.0-_PLOT_LEFT-0.10, 0.75],
-            facecolor="#111111")
+            facecolor=_BG_DARK)
         _ax_r = _ax_l.twinx()
         bar_chart.fig        = fig_menu
         bar_chart.ax_left    = _ax_l
@@ -4122,19 +4247,19 @@ def _init_plot(idx: int):
             y=0, color='#00ffaa', linestyle='--', linewidth=1.2, alpha=0.7)
         _ax_l.set_xticks(x_pos)
         _ax_l.set_xticklabels(bar_chart.word_list, rotation=45, ha='right',
-                               fontsize=7, color='#aaaaaa')
-        _ax_l.set_ylabel('Time-on-Task (s)', color='#dddddd', fontsize=9)
-        _ax_r.set_ylabel('Touch Count',      color='#dddddd', fontsize=9)
-        _ax_l.tick_params(axis='y', colors='#888888')
-        _ax_r.tick_params(axis='y', colors='#888888')
+                               fontsize=7, color=_FG_MUTED)
+        _ax_l.set_ylabel('Time-on-Task (s)', color=_FG_PRIMARY, fontsize=9)
+        _ax_r.set_ylabel('Touch Count',      color=_FG_PRIMARY, fontsize=9)
+        _ax_l.tick_params(axis='y', colors=_FG_MUTED)
+        _ax_r.tick_params(axis='y', colors=_FG_MUTED)
         _ax_l.set_title('Per-Word Performance  (Time-on-Task & Touch Counts)',
                         color='white', fontsize=11, fontweight='bold', pad=10)
         _ax_l.set_xlim(-0.5, n_words - 0.5)
         _ax_l.set_ylim(0, 1.0)
         _ax_r.set_ylim(0, 1.0)
-        _ax_l.grid(axis='y', color='#2a2a2a', linewidth=0.5, alpha=0.5)
-        for _sp in _ax_l.spines.values(): _sp.set_edgecolor('#2a2a2a')
-        for _sp in _ax_r.spines.values(): _sp.set_edgecolor('#2a2a2a')
+        _ax_l.grid(axis='y', color=_GRID_COLOR, linewidth=0.5, alpha=0.5)
+        for _sp in _ax_l.spines.values(): _sp.set_edgecolor(_GRID_COLOR)
+        for _sp in _ax_r.spines.values(): _sp.set_edgecolor(_GRID_COLOR)
         fig_menu.canvas.draw()
         bar_chart.background_snap = fig_menu.canvas.copy_from_bbox(_ax_l.bbox)
         bar_chart.left_limit_max  = 0.0
@@ -4147,9 +4272,9 @@ def _init_plot(idx: int):
         ax_wpm = _make_plot_ax()
         ax_wpm.set_title("Live WPM Trend  (Median Pre-filter → EMA)",
                          color="white", fontsize=11, fontweight="bold", pad=10)
-        ax_wpm.set_xlabel("Session Time (s)", color="#999999", fontsize=9)
-        ax_wpm.set_ylabel("Words Per Minute", color="#999999", fontsize=9)
-        ax_wpm.grid(axis='y', color='#2a2a2a', linewidth=0.5, alpha=0.5)
+        ax_wpm.set_xlabel("Session Time (s)", color=_FG_MUTED, fontsize=9)
+        ax_wpm.set_ylabel("Words Per Minute", color=_FG_MUTED, fontsize=9)
+        ax_wpm.grid(axis='y', color=_GRID_COLOR, linewidth=0.5, alpha=0.5)
         ax_wpm.axhline(y=50,  color='#ffaa00', linestyle='--',
                        linewidth=0.9, alpha=0.5)
         ax_wpm.text(0.99, 50,  ' 50 WPM (beginner)',
@@ -4167,8 +4292,8 @@ def _init_plot(idx: int):
         line_wpm_ema, = ax_wpm.plot([], [], color="#00ffaa", alpha=0.95,
                                     linewidth=2.2, label="EMA Trend")
         ax_wpm.legend(loc="upper left", fontsize=8, framealpha=0.3,
-                      facecolor="#111111", edgecolor="#333333",
-                      labelcolor="#cccccc")
+                      facecolor=_BG_DARK, edgecolor=_BG_BORDER,
+                      labelcolor=_FG_PRIMARY)
         ax_wpm.set_xlim(0, 10)
         ax_wpm.set_ylim(0, 10)
 
@@ -4180,14 +4305,14 @@ def _init_plot(idx: int):
             "Most-Regressed Words  (inter-word regressions)",
             color="white", fontsize=11, fontweight="bold", pad=10)
         reg_chart.ax.set_xlabel("Regression count",
-                                color="#999999", fontsize=9)
+                                color=_FG_MUTED, fontsize=9)
         reg_chart.ax.text(0.5, 0.5, "No regressions recorded yet",
                           transform=reg_chart.ax.transAxes,
                           ha="center", va="center", fontsize=12,
                           color=reg_chart.COLOR_EMPTY, fontstyle="italic")
         reg_chart.ax.tick_params(colors="#777777")
         for _sp in reg_chart.ax.spines.values():
-            _sp.set_edgecolor("#2a2a2a")
+            _sp.set_edgecolor(_GRID_COLOR)
         reg_chart._last_draw_time = -1e9   # force immediate redraw
         reg_chart._setup_done = True
 
@@ -4199,7 +4324,7 @@ def _init_plot(idx: int):
         # Main heatmap axes
         _ax_hm = fig_menu.add_axes(
             [_PLOT_LEFT, 0.08, 0.72 - _PLOT_LEFT, 0.84],
-            facecolor='#111111')
+            facecolor=_BG_DARK)
         monitor_3d._heatmap_ax = _ax_hm
         monitor_3d._heatmap_img = _ax_hm.imshow(
             monitor_3d.Z_tot, cmap='YlOrRd', vmin=0, vmax=1.0,
@@ -4207,8 +4332,8 @@ def _init_plot(idx: int):
         # Colorbar
         _cbar = fig_menu.colorbar(monitor_3d._heatmap_img, ax=_ax_hm,
                                    fraction=0.046, pad=0.04)
-        _cbar.ax.tick_params(colors='#888888', labelsize=8)
-        _cbar.set_label('Time-on-Task (s)', color='#cccccc', fontsize=9)
+        _cbar.ax.tick_params(colors=_FG_MUTED, labelsize=8)
+        _cbar.set_label('Time-on-Task (s)', color=_FG_PRIMARY, fontsize=9)
         monitor_3d._heatmap_cbar = _cbar
         # Cell text annotations
         monitor_3d._heatmap_texts = {}
@@ -4223,16 +4348,16 @@ def _init_plot(idx: int):
                 monitor_3d._heatmap_texts[(_hr, _hc)] = _txt
         _ax_hm.set_xticks(range(GRID))
         _ax_hm.set_xticklabels([f'C{i}' for i in range(GRID)],
-                                fontsize=8, color='#888888')
+                                fontsize=8, color=_FG_MUTED)
         _ax_hm.set_yticks(range(GRID))
         _ax_hm.set_yticklabels([f'R{i}' for i in range(GRID)],
-                                fontsize=8, color='#888888')
+                                fontsize=8, color=_FG_MUTED)
         _ax_hm.set_title('Performance Heatmap  [V-6]',
                          color='white', fontsize=11,
                          fontweight='bold', pad=10)
         _ax_hm.grid(False)
         for _sp in _ax_hm.spines.values():
-            _sp.set_edgecolor('#2a2a2a')
+            _sp.set_edgecolor(_GRID_COLOR)
         # RadioButtons for mode toggle
         _radio_ax_hm = fig_menu.add_axes([0.80, 0.35, 0.17, 0.20],
                                           facecolor='#1a1a2e')
@@ -4240,7 +4365,7 @@ def _init_plot(idx: int):
             ax=_radio_ax_hm,
             labels=['Time-on-Task', 'Mean Difficulty'], active=0)
         for _lbl in monitor_3d._radio.labels:
-            _lbl.set_color('#cccccc'); _lbl.set_fontsize(8)
+            _lbl.set_color(_FG_PRIMARY); _lbl.set_fontsize(8)
         def _on_hm_mode(label):
             monitor_3d.current_mode = 'tot' if 'Time' in label else 'diff'
             monitor_3d.last_update = -1e9  # force redraw
@@ -4265,16 +4390,16 @@ def _init_plot(idx: int):
             vel_profile.lines_past.append(_ln)
         _ax_vp.axhline(y=0, color='white', linewidth=0.5,
                        linestyle='-', alpha=0.3)
-        _ax_vp.set_xlabel('Step index', fontsize=9, color='#999999')
+        _ax_vp.set_xlabel('Step index', fontsize=9, color=_FG_MUTED)
         _ax_vp.set_ylabel('Velocity (cells/sec)', fontsize=9,
-                          color='#999999')
+                          color=_FG_MUTED)
         _ax_vp.set_title('Velocity Profile — last 20 touches  [V-7]',
                          fontsize=11, fontweight='bold',
                          color='white', pad=10)
         _ax_vp.legend(loc='upper right', fontsize=8, framealpha=0.3,
-                      facecolor='#111111', edgecolor='#333333',
-                      labelcolor='#cccccc')
-        _ax_vp.grid(True, alpha=0.3, color='#2a2a2a')
+                      facecolor=_BG_DARK, edgecolor=_BG_BORDER,
+                      labelcolor=_FG_PRIMARY)
+        _ax_vp.grid(True, alpha=0.3, color=_GRID_COLOR)
         vel_profile._last_update = -1e9
         vel_profile._setup_done  = True
 
@@ -4307,18 +4432,18 @@ def _init_plot(idx: int):
                     ha='right', va='center', fontsize=7, color='#ff7f0e', alpha=0.7)
         _ax_ep.text(0.99, 0.23, 'Struggling', transform=_ax_ep.transAxes,
                     ha='right', va='center', fontsize=7, color='#d62728', alpha=0.7)
-        _ax_ep.set_xlabel('Contact # (press→release)', fontsize=9, color='#999999')
+        _ax_ep.set_xlabel('Contact # (press→release)', fontsize=9, color=_FG_MUTED)
         _ax_ep.set_ylabel('Path efficiency (η)', fontsize=9,
-                          color='#999999')
+                          color=_FG_MUTED)
         _ax_ep.set_title('Path Efficiency Over Session  [V-8]',
                          fontsize=11, fontweight='bold',
                          color='white', pad=10)
         _ax_ep.set_ylim([0, 1.05])
         _ax_ep.set_xlim([0, 10])
         _ax_ep.legend(loc='lower right', fontsize=8, framealpha=0.3,
-                      facecolor=eff_plot.COLOR_BG, edgecolor='#333333',
-                      labelcolor='#cccccc')
-        _ax_ep.grid(True, alpha=0.3, color='#2a2a2a')
+                      facecolor=eff_plot.COLOR_BG, edgecolor=_BG_BORDER,
+                      labelcolor=_FG_PRIMARY)
+        _ax_ep.grid(True, alpha=0.3, color=_GRID_COLOR)
         eff_plot._last_update = -1e9
         eff_plot._setup_done  = True
 
@@ -4362,7 +4487,7 @@ _init_plot(_active_plot_idx)
 _wpm_plot_last_update    = 0.0
 _WPM_PLOT_UPDATE_INTERVAL = 0.5
 
-fig = plt.figure(figsize=(16, 10), facecolor="#111111")
+fig = plt.figure(figsize=(16, 10), facecolor=_BG_DARK)
 # Leave bottom 18% of figure for threshold sliders + button
 gs  = gridspec.GridSpec(1, 3, width_ratios=[1.1, 0.85, 0.85], wspace=0.05,
                         bottom=0.22, top=0.96)
@@ -4370,18 +4495,18 @@ ax_heat    = fig.add_subplot(gs[0])
 ax_metrics = fig.add_subplot(gs[1])
 ax_words   = fig.add_subplot(gs[2])
 for ax in (ax_heat, ax_metrics, ax_words):
-    ax.set_facecolor("#111111")
+    ax.set_facecolor(_BG_CARD)
 ax_metrics.axis("off")
 ax_words.axis("off")
-fig.patch.set_facecolor("#111111")
+fig.patch.set_facecolor(_BG_DARK)
 
 # ── [Edit Words] button ────────────────────────────────────────
 ax_btn   = fig.add_axes([0.01, 0.005, 0.12, 0.035])
 btn_edit = mwidgets.Button(ax_btn, "✎ Edit Words",
-                           color="#1a3a5c", hovercolor="#2a5a8c")
-btn_edit.label.set_color("#a0d0ff")
+                           color="#161b22", hovercolor="#21262d")
+btn_edit.label.set_color(_ACCENT_BLUE)
 btn_edit.label.set_fontsize(9)
-btn_edit.label.set_fontfamily("monospace")
+btn_edit.label.set_fontfamily("sans-serif")
 btn_edit.on_clicked(lambda _: open_word_boundary_editor())
 
 # ── Threshold sliders (one per sensor row) ─────────────────────
@@ -4393,8 +4518,8 @@ from matplotlib.widgets import Slider as _Slider
 
 _thresh_slider_label = fig.text(
     0.22, 0.195, "  ROW TOUCH THRESHOLDS  (drag to adjust live)",
-    fontsize=9, fontweight="bold", color="#e94560",
-    fontfamily="monospace", ha="center",
+    fontsize=9, fontweight="bold", color=_ACCENT_ORANGE,
+    fontfamily="sans-serif", ha="center",
 )
 
 _threshold_sliders: list = []
@@ -4424,7 +4549,7 @@ for _i_sl in range(GRID):
     _sl.label.set_color("#a0c4ff")
     _sl.label.set_fontsize(8)
     _sl.label.set_fontfamily("monospace")
-    _sl.valtext.set_color("#dddddd")
+    _sl.valtext.set_color(_FG_PRIMARY)
     _sl.valtext.set_fontsize(8)
 
     # Closure: capture _i_sl by default arg
@@ -4442,23 +4567,23 @@ ax_heat.set_title(
     "Touch Pressure Map  (raw sensor layout)\n"
     "Cell labels show word at logical (TX-shifted) position",
     color="white", fontsize=11, fontweight="bold", pad=10)
-ax_heat.set_xlabel("Column →   C0 … C6   (RX)", color="#999999", fontsize=9)
-ax_heat.set_ylabel("Row ↓   R0 … R6   (TX mux)", color="#999999", fontsize=9)
+ax_heat.set_xlabel("Column →   C0 … C6   (RX)", color=_FG_MUTED, fontsize=9)
+ax_heat.set_ylabel("Row ↓   R0 … R6   (TX mux)", color=_FG_MUTED, fontsize=9)
 ax_heat.tick_params(colors="#777777")
 for sp in ax_heat.spines.values():
-    sp.set_edgecolor("#2a2a2a")
+    sp.set_edgecolor(_GRID_COLOR)
 
 ax_heat.set_xticks(np.arange(-0.5, GRID, 1), minor=True)
 ax_heat.set_yticks(np.arange(-0.5, GRID, 1), minor=True)
-ax_heat.grid(which="minor", color="#2a2a2a", linewidth=0.8)
+ax_heat.grid(which="minor", color=_GRID_COLOR, linewidth=0.8)
 ax_heat.tick_params(which="minor", length=0)
 
 ax_heat.set_xticks(range(GRID))
 ax_heat.set_xticklabels([f"C{i}" for i in range(GRID)],
-                        color="#888888", fontsize=8)
+                        color=_FG_MUTED, fontsize=8)
 ax_heat.set_yticks(range(GRID))
 ax_heat.set_yticklabels([f"R{i}" for i in range(GRID)],
-                        color="#888888", fontsize=8)
+                        color=_FG_MUTED, fontsize=8)
 
 # ── Cell label text objects ────────────────────────────────────
 _cell_texts: dict = {}
@@ -4479,16 +4604,16 @@ for r in range(GRID):
 metrics_txt = ax_metrics.text(
     0.05, 0.97, "Loading…",
     transform=ax_metrics.transAxes,
-    fontsize=11.0, va="top", ha="left",
-    family="monospace", color="#dddddd", linespacing=1.85,
+    fontsize=10.5, va="top", ha="left",
+    family="sans-serif", color=_FG_PRIMARY, linespacing=1.85,
 )
 
 # ── Word-stats text ────────────────────────────────────────────
 words_txt = ax_words.text(
     0.05, 0.97, "Loading…",
     transform=ax_words.transAxes,
-    fontsize=10.5, va="top", ha="left",
-    family="monospace", color="#dddddd", linespacing=1.75,
+    fontsize=10.0, va="top", ha="left",
+    family="sans-serif", color=_FG_PRIMARY, linespacing=1.75,
 )
 
 disp_Z  = np.zeros((GRID, GRID))
@@ -4629,7 +4754,7 @@ try:
                 monitor_3d._heatmap_img.set_data(_Z_show)
                 monitor_3d._heatmap_img.set_clim(0, _z_max)
                 _mode_label = 'Time-on-Task (s)' if monitor_3d.current_mode == 'tot' else 'EWIQR Difficulty'
-                monitor_3d._heatmap_cbar.set_label(_mode_label, color='#cccccc', fontsize=9)
+                monitor_3d._heatmap_cbar.set_label(_mode_label, color=_FG_PRIMARY, fontsize=9)
                 # Update cell annotations
                 for _r_hm in range(GRID):
                     for _c_hm in range(GRID):
@@ -4637,7 +4762,7 @@ try:
                         _val = _Z_show[_r_hm, _c_hm]
                         _val_str = f'{_val:.2f}' if _val > 0 else '—'
                         # High-value cells get dark text for contrast
-                        _txt_color = '#111111' if _val > _z_max * 0.6 else 'white'
+                        _txt_color = _BG_DARK if _val > _z_max * 0.6 else 'white'
                         _t = monitor_3d._heatmap_texts[(_r_hm, _c_hm)]
                         _t.set_text(f'{_word}\n{_val_str}')
                         _t.set_color(_txt_color)
@@ -4707,7 +4832,14 @@ try:
         m  = perf.snapshot
         cw = m.get("current_word", "")
         cw_str = cw if cw else "—"
-        st_icon = "●" if m["is_touching"] else "○"
+
+        # Per-finger WPM (from cached values)
+        _f0_wpm = _cached_finger_wpm[0]
+        _f1_wpm = _cached_finger_wpm[1]
+
+        # Determine finger activity from perf live state
+        _is_touching = m["is_touching"]
+        st_icon = "●" if _is_touching else "○"
 
         # Traffic-light indicators
         _wpm = m['wpm']
@@ -4720,31 +4852,28 @@ try:
         lines = [
             f"  {st_icon} {cw_str:^18s}  {m['pressed_cells']} cells",
             "",
-            "  ┌─ SPEED ────────────────────┐",
-            f"  │ {_wpm_dot} {_wpm:.0f} WPM  (trend {wpm_trend.get_current_ema():.0f})",
-            f"  │   {m['chars_total']} chars  {m['chars_window']} in window",
-            f"  │   {m['avg_duration']*1000:.0f} ms/touch",
-            "  └────────────────────────────┘",
+            "  ── SPEED ────────────────────",
+            f"  {_wpm_dot} {_wpm:.0f} WPM  (trend {wpm_trend.get_current_ema():.0f})",
+            f"    F0: {_f0_wpm:.0f} WPM   F1: {_f1_wpm:.0f} WPM",
+            f"    {m['chars_total']} chars  {m['chars_window']} in window",
+            f"    {m['avg_duration']*1000:.0f} ms/touch",
             "",
-            "  ┌─ ACCURACY ─────────────────┐",
-            f"  │ {_eff_dot} Path η={_eff:.2f}",
-            f"  │   Backtracks: {m['total_backtracks']}",
-            f"  │   Regressions: {ws['total_regressions']}",
-            f"  │   Hesitation: {ws['hesitation_rate']*100:.0f}%",
-            "  └────────────────────────────┘",
+            "  ── ACCURACY ─────────────────",
+            f"  {_eff_dot} Path η={_eff:.2f}",
+            f"    Backtracks: {m['total_backtracks']}",
+            f"    Regressions: {ws['total_regressions']}",
+            f"    Hesitation: {ws['hesitation_rate']*100:.0f}%",
             "",
-            "  ┌─ DIFFICULTY ────────────────┐",
-            f"  │ {_diff_dot} Avg D={_diff:.2f}",
-            f"  │   Reversals: {m['avg_reversals']:.1f}",
-            f"  │   Word rev: {m['word_reversals_total']}",
-            f"  │   Hardest: {hardest_str}",
-            "  └────────────────────────────┘",
+            "  ── DIFFICULTY ────────────────",
+            f"  {_diff_dot} Avg D={_diff:.2f}",
+            f"    Reversals: {m['avg_reversals']:.1f}",
+            f"    Word rev: {m['word_reversals_total']}",
+            f"    Hardest: {hardest_str}",
             "",
-            "  ┌─ VELOCITY ─────────────────┐",
-            f"  │   Speed: {vt['mean_vel']:.1f} cells/s",
-            f"  │   IQR: {vt['iqr']:.2f}  ({vt['n_events']} events)",
-            f"  │   Consistency: {vt['consistency']:.2f}",
-            "  └────────────────────────────┘",
+            "  ── VELOCITY ─────────────────",
+            f"    Speed: {vt['mean_vel']:.1f} cells/s",
+            f"    IQR: {vt['iqr']:.2f}  ({vt['n_events']} events)",
+            f"    Consistency: {vt['consistency']:.2f}",
         ]
 
         # Top EWIQR hardest word (just 1 line summary)
@@ -4827,6 +4956,21 @@ except KeyboardInterrupt:
           f"(avg D={ws['hardest_word_d']:.3f})")
     print(f"Final WPM (sliding window): {perf._wpm_counter.get_wpm()}")
     print(f"Final WPM trend (EMA)    : {wpm_trend.get_current_ema():.1f}")
+
+    # ── Per-finger summary ─────────────────────────────────────
+    print("\n═══ PER-FINGER STATS (Butterfly) ═══")
+    for fi in range(2):
+        ft = finger_trackers[fi]
+        fi_ws = ft["word_stats"].snapshot()
+        fi_wpm = ft["perf"]._wpm_counter.get_wpm()
+        fi_trend = ft["wpm_trend"].get_current_ema()
+        fi_vt = ft["velocity"].snapshot()
+        print(f"\n── Finger {fi} ──")
+        print(f"  Touches: {fi_ws['total_registered']}")
+        print(f"  WPM: {fi_wpm:.0f}  (EMA trend: {fi_trend:.1f})")
+        print(f"  Regressions: {fi_ws['total_regressions']}")
+        print(f"  Velocity: {fi_vt['mean_vel']:.1f} cells/s  "
+              f"consistency: {fi_vt['consistency']:.2f}")
 
     # ── V-4 final WPM trend report ────────────────────────────
     _, y_raw_final, y_ema_final, _ = wpm_trend.get_plot_data()
