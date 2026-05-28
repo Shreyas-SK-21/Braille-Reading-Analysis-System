@@ -1103,10 +1103,7 @@ def read_frame(ser: serial.Serial) -> np.ndarray:
 # ─────────────────────── Touch analysis ───────────────────────
 
 def threshold_mask(delta: np.ndarray) -> np.ndarray:
-    mask = np.zeros_like(delta, dtype=bool)
-    for r in range(GRID):
-        mask[r, :] = delta[r, :] >= ROW_THRESHOLDS[r]
-    return mask
+    return delta >= ROW_THRESHOLDS[:, np.newaxis]
 
 
 def connected_components_4(mask: np.ndarray):
@@ -3521,7 +3518,7 @@ class PerformanceMetrics:
 # ═══════════════════════════ SETUP ════════════════════════════
 
 print("Opening serial port…")
-ser = serial.Serial(PORT, BAUD, timeout=0.1)
+ser = serial.Serial(PORT, BAUD, timeout=0.05)
 time.sleep(2.0)
 
 print(f"Calibrating ({CAL_FRAMES} frames) — keep sensor untouched…")
@@ -4620,6 +4617,22 @@ disp_Z  = np.zeros((GRID, GRID))
 last_ui = time.time()
 ui_dt   = 1.0 / UI_FPS
 
+# ── Blit infrastructure for fast heatmap rendering ─────────────
+# Instead of calling fig.canvas.draw_idle() every frame (which triggers
+# a full ~500ms canvas redraw), we use blitting:
+#   Fast path (~3ms):  restore background → draw heatmap artist → blit region
+#   Slow path (~50ms): full draw() at 2fps when text/snapshot data changes
+fig.canvas.draw()
+_main_bg = fig.canvas.copy_from_bbox(ax_heat.bbox)
+_needs_full_redraw = False
+
+def _on_main_resize(event=None):
+    global _main_bg
+    fig.canvas.draw()
+    _main_bg = fig.canvas.copy_from_bbox(ax_heat.bbox)
+
+fig.canvas.mpl_connect('resize_event', _on_main_resize)
+
 # ── Fix 3: Stop flag — set when either window is closed ───────
 _ui_stop = threading.Event()
 
@@ -4637,19 +4650,19 @@ try:
         if now - last_ui < ui_dt:
             time.sleep(max(0.0, ui_dt - (now - last_ui)))
             continue
-        last_ui = time.time()
+        last_ui = now
 
         # ── B4: Only copy frame if reader delivered a new one ──
         with latest_frame_lk:
             _cur_gen = _frame_gen
             frame = latest_frame.copy()
 
-        # ── C2: In-place numpy ops — no temporary allocations ─
+        # ── C2: Vectorised numpy ops — no Python loops ────────
         np.subtract(frame, baseline, out=_raw_delta_buf)
         np.clip(_raw_delta_buf, 0.0, None, out=_raw_delta_buf)
-        np.copyto(_thresh_buf, _raw_delta_buf)
-        for r in range(GRID):
-            _thresh_buf[r, _thresh_buf[r, :] < ROW_THRESHOLDS[r]] = 0.0
+        np.multiply(_raw_delta_buf,
+                     _raw_delta_buf >= ROW_THRESHOLDS[:, np.newaxis],
+                     out=_thresh_buf)
 
         hmap.set_data(_thresh_buf)
         pk = float(_thresh_buf.max())
@@ -4658,6 +4671,7 @@ try:
         # ── A3: Refresh cell labels ONLY when boundaries change ─
         if _cell_labels_dirty:
             _cell_labels_dirty = False
+            _needs_full_redraw = True
             with _cell_word_cache_lock:
                 cache_snap = dict(_cell_word_cache)
             for r in range(GRID):
@@ -4680,6 +4694,7 @@ try:
             with word_boundaries_lock:
                 _cached_wb_snap = {k: list(v) for k, v in word_boundaries.items()}
             _cached_skip_snap = compute_skip_stats(_cached_wb_snap, _cached_ws["word_count"])
+            _needs_full_redraw = True   # snapshot data changed → schedule full redraw for text panels
 
         # ── A4: Chart updates — only update the ACTIVE plot ─────────────
         # Skipping all chart work for hidden plots eliminates the biggest
@@ -4929,8 +4944,17 @@ try:
         if _editor_requested.is_set():
             _open_editor_on_main_thread()  # blocks until editor window closed
 
-        # ── Flush main heatmap figure every frame ─────────────
-        fig.canvas.draw_idle()
+        # ── Fast blit path: only redraw heatmap pixels ────────
+        # Full draw (~50ms) only when text/snapshot changed (2fps).
+        # Blit path (~3ms) on all other frames — only the heatmap.
+        if _needs_full_redraw:
+            _needs_full_redraw = False
+            fig.canvas.draw()
+            _main_bg = fig.canvas.copy_from_bbox(ax_heat.bbox)
+        else:
+            fig.canvas.restore_region(_main_bg)
+            ax_heat.draw_artist(hmap)
+            fig.canvas.blit(ax_heat.bbox)
         fig.canvas.flush_events()
 
         # ── Flush the plot-menu figure (one window, one active plot) ──
@@ -4941,7 +4965,8 @@ try:
         if not _plot_inited[_active_plot_idx]:
             _init_plot(_active_plot_idx)
         try:
-            fig_menu.canvas.draw_idle()
+            # draw_idle() removed — chart update functions already call it
+            # when their data changes.  Only flush input events here.
             fig_menu.canvas.flush_events()
         except Exception:
             pass
