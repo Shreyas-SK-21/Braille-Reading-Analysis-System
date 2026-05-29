@@ -156,26 +156,54 @@ FIXES vs previous version
          event's path efficiency value.
 """
 
+import sys
 import serial
 import numpy as np
 from typing import Optional
-import matplotlib
-matplotlib.use("TkAgg")          # change to "Qt5Agg" / "TkAgg" on Windows/Linux
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-from matplotlib.colors import LinearSegmentedColormap
-import matplotlib.widgets as mwidgets
-from matplotlib.widgets import RadioButtons
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  — registers '3d' projection
 import threading
 import queue
 import time
 from collections import deque, defaultdict
 import bisect
 import warnings
-import tkinter as tk
-from tkinter import ttk, messagebox
 warnings.filterwarnings("ignore")
+
+# ═══════════════════════════ MODE FLAG ═════════════════════════
+# Run with --legacy to use the original Matplotlib/Tkinter UI.
+# Default (no flag) uses the new PyQtGraph/PyQt5 real-time UI.
+_LEGACY_MODE = "--legacy" in sys.argv
+
+if _LEGACY_MODE:
+    import matplotlib
+    matplotlib.use("TkAgg")
+    import matplotlib.pyplot as plt
+    import matplotlib.gridspec as gridspec
+    from matplotlib.colors import LinearSegmentedColormap
+    import matplotlib.widgets as mwidgets
+    from matplotlib.widgets import RadioButtons
+    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+    import tkinter as tk
+    from tkinter import ttk, messagebox
+else:
+    # ── Headless matplotlib for class definitions that reference it ──
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.gridspec as gridspec
+    from matplotlib.colors import LinearSegmentedColormap
+    import matplotlib.widgets as mwidgets
+    from matplotlib.widgets import RadioButtons
+    # ── PyQtGraph + PyQt5 ──
+    import pyqtgraph as pg
+    from PyQt5 import QtWidgets, QtCore, QtGui
+    from PyQt5.QtWidgets import (
+        QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+        QLabel, QSlider, QPushButton, QDialog, QScrollArea, QSpinBox,
+        QLineEdit, QStackedWidget, QListWidget, QListWidgetItem,
+        QMessageBox, QSplitter, QFrame, QApplication, QGroupBox,
+    )
+    from PyQt5.QtCore import Qt, QTimer
+    from PyQt5.QtGui import QFont, QColor, QPalette
 
 # ═══════════════════════════ CONFIG ═══════════════════════════
 PORT        = "COM5"   # adjust for your OS
@@ -261,8 +289,9 @@ _ACCENT_RED    = "#f85149"   # errors/danger
 _GRID_COLOR    = "#21262d"   # grid lines
 
 # Font stack — first available is used
-plt.rcParams['font.family'] = ['Inter', 'Segoe UI', 'SF Pro Display',
-                                'Helvetica Neue', 'sans-serif']
+if _LEGACY_MODE:
+    plt.rcParams['font.family'] = ['Inter', 'Segoe UI', 'SF Pro Display',
+                                    'Helvetica Neue', 'sans-serif']
 
 # Active finger view for plot menu: 0 = finger 0, 1 = finger 1, 2 = combined
 _active_finger_view = 2
@@ -3605,6 +3634,12 @@ def reader_thread():
     global latest_frame, _frame_gen
     while True:
         try:
+            # ── Phase 1: Flush stale serial data ─────────────────
+            # The OS serial buffer accumulates frames faster than the
+            # app processes them, causing ~1.3s of latency.  Flushing
+            # before each read discards all queued-but-unread bytes,
+            # ensuring we always read the MOST RECENT frame.
+            ser.reset_input_buffer()
             f = read_frame(ser)
         except Exception as e:
             print("Serial error:", e)
@@ -4029,1156 +4064,2521 @@ threading.Thread(target=reader_thread,  daemon=True, name="reader").start()
 threading.Thread(target=metrics_thread, daemon=True, name="metrics").start()
 
 
-# ═══════════════════════════ VISUALISATION ════════════════════
 
-_cmap = LinearSegmentedColormap.from_list(
-    "touch_modern",
-    [_BG_DARK, "#1a1040", "#4c1d95", "#dc2626", "#f97316", "#fbbf24", "#fef3c7"],
-    N=256,
-)
+if _LEGACY_MODE:
+    # ═══════════════════════════════════════════════════════════════
+    # LEGACY MATPLOTLIB UI — original visualization layer
+    # Run with: python braille_ui.py --legacy
+    # ═══════════════════════════════════════════════════════════════
 
-plt.ion()
+    # ═══════════════════════════ VISUALISATION ════════════════════
 
-# ══════════════════════════════════════════════════════════════
-# PLOT MENU — Single secondary window, one plot at a time
-# ══════════════════════════════════════════════════════════════
-# Instead of 6 separate windows, we create ONE secondary figure
-# with a RadioButtons panel on the left.  Only the selected plot
-# is built and rendered each frame — all others are skipped.
-#
-# Plot IDs (indices into PLOT_LABELS):
-#   0  Per-Word Bar Chart        (BarChartBlit)
-#   1  Live WPM Trend            (WPMTrendTracker)
-#   2  Regression Bar Chart      (RegressionBarChart)
-#   3  3D Surface Monitor        (Monitor3D)
-#   4  Velocity Profile          (VelocityProfileMonitor)
-#   5  Path Efficiency           (EfficiencyPlot)
-# ══════════════════════════════════════════════════════════════
+    _cmap = LinearSegmentedColormap.from_list(
+        "touch_modern",
+        [_BG_DARK, "#1a1040", "#4c1d95", "#dc2626", "#f97316", "#fbbf24", "#fef3c7"],
+        N=256,
+    )
 
-PLOT_LABELS = [
-    "Per-Word Bars",
-    "WPM Trend",
-    "Regression Chart",
-    "Perf. Heatmap",
-    "Velocity Profile",
-    "Path Efficiency",
-]
+    plt.ion()
 
-# Active plot index (0-5). Only this plot receives updates.
-_active_plot_idx = 0
+    # ══════════════════════════════════════════════════════════════
+    # PLOT MENU — Single secondary window, one plot at a time
+    # ══════════════════════════════════════════════════════════════
+    # Instead of 6 separate windows, we create ONE secondary figure
+    # with a RadioButtons panel on the left.  Only the selected plot
+    # is built and rendered each frame — all others are skipped.
+    #
+    # Plot IDs (indices into PLOT_LABELS):
+    #   0  Per-Word Bar Chart        (BarChartBlit)
+    #   1  Live WPM Trend            (WPMTrendTracker)
+    #   2  Regression Bar Chart      (RegressionBarChart)
+    #   3  3D Surface Monitor        (Monitor3D)
+    #   4  Velocity Profile          (VelocityProfileMonitor)
+    #   5  Path Efficiency           (EfficiencyPlot)
+    # ══════════════════════════════════════════════════════════════
 
-# ── Create the single secondary figure ────────────────────────
-_MENU_FIG_W  = 14   # figure width  (inches)
-_MENU_FIG_H  = 7    # figure height (inches)
-_RADIO_LEFT  = 0.01
-_RADIO_BOTTOM = 0.35
-_RADIO_WIDTH  = 0.11
-_RADIO_HEIGHT = 0.55
-_PLOT_LEFT    = 0.14   # plot axes start x (leaves room for radio panel)
+    PLOT_LABELS = [
+        "Per-Word Bars",
+        "WPM Trend",
+        "Regression Chart",
+        "Perf. Heatmap",
+        "Velocity Profile",
+        "Path Efficiency",
+    ]
 
-fig_menu = plt.figure(figsize=(_MENU_FIG_W, _MENU_FIG_H), facecolor="#0d1117")
-fig_menu.patch.set_facecolor("#0d1117")
+    # Active plot index (0-5). Only this plot receives updates.
+    _active_plot_idx = 0
 
-# Radio button panel
-_ax_radio = fig_menu.add_axes(
-    [_RADIO_LEFT, _RADIO_BOTTOM, _RADIO_WIDTH, _RADIO_HEIGHT],
-    facecolor="#161b22",
-)
-_radio_sel = RadioButtons(
-    ax=_ax_radio,
-    labels=PLOT_LABELS,
-    active=_active_plot_idx,
-)
-for lbl in _radio_sel.labels:
-    lbl.set_fontsize(8.5)
-    lbl.set_color("#c9d1d9")
-    lbl.set_fontfamily("monospace")
-_ax_radio.set_title("PLOT\nMENU", color="#58a6ff", fontsize=8,
-                    fontweight="bold", pad=4)
-for sp in _ax_radio.spines.values():
-    sp.set_edgecolor("#30363d")
+    # ── Create the single secondary figure ────────────────────────
+    _MENU_FIG_W  = 14   # figure width  (inches)
+    _MENU_FIG_H  = 7    # figure height (inches)
+    _RADIO_LEFT  = 0.01
+    _RADIO_BOTTOM = 0.35
+    _RADIO_WIDTH  = 0.11
+    _RADIO_HEIGHT = 0.55
+    _PLOT_LEFT    = 0.14   # plot axes start x (leaves room for radio panel)
 
-# ── Helper: create a fresh plot-area axes inside fig_menu ─────
-def _make_plot_ax(rect=None):
-    """Add (or replace) the main plot axes in fig_menu."""
-    if rect is None:
-        rect = [_PLOT_LEFT, 0.08, 1.0 - _PLOT_LEFT - 0.02, 0.88]
-    ax = fig_menu.add_axes(rect, facecolor=_BG_DARK)
-    ax.tick_params(colors="#777777")
-    for sp in ax.spines.values():
-        sp.set_edgecolor(_GRID_COLOR)
-    return ax
+    fig_menu = plt.figure(figsize=(_MENU_FIG_W, _MENU_FIG_H), facecolor="#0d1117")
+    fig_menu.patch.set_facecolor("#0d1117")
 
-# ── lazy-init flags — each plot is set up ONCE on first selection
-_plot_inited = [False] * len(PLOT_LABELS)
-
-# References shared across setup and UI loop
-ax_wpm        = None
-line_wpm_raw  = None
-line_wpm_ema  = None
-
-# Throttles
-_wpm_plot_last_update    = 0.0
-_WPM_PLOT_UPDATE_INTERVAL = 0.5
-
-# ── Alias the secondary-figure references expected by existing code ──
-# bar_chart.fig, reg_chart.fig, monitor_3d.figure, vel_profile.figure,
-# eff_plot.figure will each be pointed at fig_menu after their lazy init.
-# The classes themselves are unchanged; we just set their .fig / .figure.
-
-def _teardown_menu_plot_axes():
-    """
-    Remove all non-radio axes from fig_menu safely.
-    Does NOT call clf() — that would destroy the RadioButtons internal
-    PathCollection artists and leave self.figure=None, crashing on draw.
-    Instead we delaxes each plot axis individually and rebuild the
-    RadioButtons widget fresh on a new axes object.
-    """
-    global _ax_radio, _radio_sel
-
-    # Release any active mouse grab from the old RadioButtons widget before
-    # destroying its axes — otherwise the new widget raises:
-    # RuntimeError: Another Axes already grabs mouse input
-    try:
-        fig_menu.canvas.release_mouse(_ax_radio)
-    except Exception:
-        pass
-    # ── Reset ALL plot-object state before wiping axes ────────────
-    # This is critical: background metrics_thread may still call
-    # _update_velocity_plot / _update_efficiency_plot after a plot switch.
-    # If _setup_done stays True but axes is deleted, the update writes to
-    # a detached artist (wrong) or crashes.  Resetting here makes every
-    # _update_* method return immediately via the `if not self._setup_done`
-    # guard until the next _init_plot rebuilds them.
-    vel_profile._setup_done  = False
-    vel_profile.axes         = None
-    eff_plot._setup_done     = False
-    eff_plot.axes            = None
-    bar_chart._setup_done    = False
-    reg_chart._setup_done    = False
-    monitor_3d._setup_done   = False
-
-    # Remove every axes (all are stale after the resets above)
-    for _ax in list(fig_menu.get_axes()):
-        fig_menu.delaxes(_ax)   # remove ALL — we'll re-add radio below
-
-    # Re-create the radio panel axes (fresh, no stale artists)
+    # Radio button panel
     _ax_radio = fig_menu.add_axes(
         [_RADIO_LEFT, _RADIO_BOTTOM, _RADIO_WIDTH, _RADIO_HEIGHT],
         facecolor="#161b22",
     )
-    _ax_radio.set_title("PLOT\nMENU", color="#58a6ff",
-                         fontsize=9, fontweight="bold", pad=6)
-    for _sp in _ax_radio.spines.values():
-        _sp.set_edgecolor("#30363d")
-
-    # Recreate the RadioButtons widget — the old one's artists are detached
     _radio_sel = RadioButtons(
         ax=_ax_radio,
         labels=PLOT_LABELS,
         active=_active_plot_idx,
     )
-    for _lbl in _radio_sel.labels:
-        _lbl.set_fontsize(8.5)
-        _lbl.set_color("#c9d1d9")
-        _lbl.set_fontfamily("monospace")
-    _radio_sel.on_clicked(_on_plot_select)
+    for lbl in _radio_sel.labels:
+        lbl.set_fontsize(8.5)
+        lbl.set_color("#c9d1d9")
+        lbl.set_fontfamily("monospace")
+    _ax_radio.set_title("PLOT\nMENU", color="#58a6ff", fontsize=8,
+                        fontweight="bold", pad=4)
+    for sp in _ax_radio.spines.values():
+        sp.set_edgecolor("#30363d")
+
+    # ── Helper: create a fresh plot-area axes inside fig_menu ─────
+    def _make_plot_ax(rect=None):
+        """Add (or replace) the main plot axes in fig_menu."""
+        if rect is None:
+            rect = [_PLOT_LEFT, 0.08, 1.0 - _PLOT_LEFT - 0.02, 0.88]
+        ax = fig_menu.add_axes(rect, facecolor=_BG_DARK)
+        ax.tick_params(colors="#777777")
+        for sp in ax.spines.values():
+            sp.set_edgecolor(_GRID_COLOR)
+        return ax
+
+    # ── lazy-init flags — each plot is set up ONCE on first selection
+    _plot_inited = [False] * len(PLOT_LABELS)
+
+    # References shared across setup and UI loop
+    ax_wpm        = None
+    line_wpm_raw  = None
+    line_wpm_ema  = None
+
+    # Throttles
+    _wpm_plot_last_update    = 0.0
+    _WPM_PLOT_UPDATE_INTERVAL = 0.5
+
+    # ── Alias the secondary-figure references expected by existing code ──
+    # bar_chart.fig, reg_chart.fig, monitor_3d.figure, vel_profile.figure,
+    # eff_plot.figure will each be pointed at fig_menu after their lazy init.
+    # The classes themselves are unchanged; we just set their .fig / .figure.
+
+    def _teardown_menu_plot_axes():
+        """
+        Remove all non-radio axes from fig_menu safely.
+        Does NOT call clf() — that would destroy the RadioButtons internal
+        PathCollection artists and leave self.figure=None, crashing on draw.
+        Instead we delaxes each plot axis individually and rebuild the
+        RadioButtons widget fresh on a new axes object.
+        """
+        global _ax_radio, _radio_sel
+
+        # Release any active mouse grab from the old RadioButtons widget before
+        # destroying its axes — otherwise the new widget raises:
+        # RuntimeError: Another Axes already grabs mouse input
+        try:
+            fig_menu.canvas.release_mouse(_ax_radio)
+        except Exception:
+            pass
+        # ── Reset ALL plot-object state before wiping axes ────────────
+        # This is critical: background metrics_thread may still call
+        # _update_velocity_plot / _update_efficiency_plot after a plot switch.
+        # If _setup_done stays True but axes is deleted, the update writes to
+        # a detached artist (wrong) or crashes.  Resetting here makes every
+        # _update_* method return immediately via the `if not self._setup_done`
+        # guard until the next _init_plot rebuilds them.
+        vel_profile._setup_done  = False
+        vel_profile.axes         = None
+        eff_plot._setup_done     = False
+        eff_plot.axes            = None
+        bar_chart._setup_done    = False
+        reg_chart._setup_done    = False
+        monitor_3d._setup_done   = False
+
+        # Remove every axes (all are stale after the resets above)
+        for _ax in list(fig_menu.get_axes()):
+            fig_menu.delaxes(_ax)   # remove ALL — we'll re-add radio below
+
+        # Re-create the radio panel axes (fresh, no stale artists)
+        _ax_radio = fig_menu.add_axes(
+            [_RADIO_LEFT, _RADIO_BOTTOM, _RADIO_WIDTH, _RADIO_HEIGHT],
+            facecolor="#161b22",
+        )
+        _ax_radio.set_title("PLOT\nMENU", color="#58a6ff",
+                             fontsize=9, fontweight="bold", pad=6)
+        for _sp in _ax_radio.spines.values():
+            _sp.set_edgecolor("#30363d")
+
+        # Recreate the RadioButtons widget — the old one's artists are detached
+        _radio_sel = RadioButtons(
+            ax=_ax_radio,
+            labels=PLOT_LABELS,
+            active=_active_plot_idx,
+        )
+        for _lbl in _radio_sel.labels:
+            _lbl.set_fontsize(8.5)
+            _lbl.set_color("#c9d1d9")
+            _lbl.set_fontfamily("monospace")
+        _radio_sel.on_clicked(_on_plot_select)
 
 
-def _init_plot(idx: int):
-    """Lazy-init the selected plot inside fig_menu (called once per plot)."""
-    global ax_wpm, line_wpm_raw, line_wpm_ema
-    _teardown_menu_plot_axes()
+    def _init_plot(idx: int):
+        """Lazy-init the selected plot inside fig_menu (called once per plot)."""
+        global ax_wpm, line_wpm_raw, line_wpm_ema
+        _teardown_menu_plot_axes()
 
-    if idx == 0:   # ── Per-Word Bar Chart ──────────────────────
-        # BarChartBlit.setup() creates its own fig; we redirect it
-        # to use axes inside fig_menu instead.
-        with word_boundaries_lock:
-            _wb_for_chart = {k: list(v) for k, v in word_boundaries.items()}
-        # Build word list — dynamic count based on user block-width config
-        bar_chart.word_list = []
-        for _ri in range(GRID):
-            for _e in _wb_for_chart.get(_ri, []):
-                bar_chart.word_list.append(_e["word"])
-        n_words = len(bar_chart.word_list)
-        x_pos   = np.arange(n_words)
-        bar_width = 0.35
-        tab10 = plt.cm.tab10
-        # Use a wide axes for the bar chart
-        _ax_l = fig_menu.add_axes(
-            [_PLOT_LEFT, 0.18, 1.0-_PLOT_LEFT-0.10, 0.75],
-            facecolor=_BG_DARK)
-        _ax_r = _ax_l.twinx()
-        bar_chart.fig        = fig_menu
-        bar_chart.ax_left    = _ax_l
-        bar_chart.ax_right   = _ax_r
-        # Build per-word row mapping for color assignment
-        _word_row_map = []
-        for _ri in range(GRID):
-            for _e in _wb_for_chart.get(_ri, []):
-                _word_row_map.append(_ri)
-        bar_chart.primary_bars = []
-        bar_chart.count_bars   = []
-        for _i in range(n_words):
-            _row = _word_row_map[_i] if _i < len(_word_row_map) else 0
-            _col = tab10(_row)
-            bar_chart.primary_bars.append(
-                _ax_l.bar(_i - bar_width/2, 0, bar_width,
-                          color=_col, alpha=1.0, edgecolor='none')[0])
-            bar_chart.count_bars.append(
-                _ax_r.bar(_i + bar_width/2, 0, bar_width,
-                          color=_col, alpha=0.3, edgecolor='none')[0])
-        _ec = _ax_l.errorbar(x_pos, np.zeros(n_words), yerr=np.zeros(n_words),
-                             fmt='none', ecolor='#ffffff', elinewidth=0.8,
-                             capsize=2, capthick=0.6, alpha=0.5)
-        bar_chart.error_caps_lo = _ec[1][0] if len(_ec[1]) > 0 else None
-        bar_chart.error_caps_hi = _ec[1][1] if len(_ec[1]) > 1 else None
-        bar_chart.error_stems   = _ec[2][0] if len(_ec[2]) > 0 else None
-        bar_chart.asterisk_texts = []
-        for _i in range(n_words):
-            bar_chart.asterisk_texts.append(
-                _ax_l.text(_i, 0, "*", ha='center', va='bottom',
-                           fontsize=14, fontweight='bold',
-                           color='#ff4444', visible=False))
-        bar_chart.hline = _ax_l.axhline(
-            y=0, color='#00ffaa', linestyle='--', linewidth=1.2, alpha=0.7)
-        _ax_l.set_xticks(x_pos)
-        _ax_l.set_xticklabels(bar_chart.word_list, rotation=45, ha='right',
-                               fontsize=7, color=_FG_MUTED)
-        _ax_l.set_ylabel('Time-on-Task (s)', color=_FG_PRIMARY, fontsize=9)
-        _ax_r.set_ylabel('Touch Count',      color=_FG_PRIMARY, fontsize=9)
-        _ax_l.tick_params(axis='y', colors=_FG_MUTED)
-        _ax_r.tick_params(axis='y', colors=_FG_MUTED)
-        _ax_l.set_title('Per-Word Performance  (Time-on-Task & Touch Counts)',
-                        color='white', fontsize=11, fontweight='bold', pad=10)
-        _ax_l.set_xlim(-0.5, n_words - 0.5)
-        _ax_l.set_ylim(0, 1.0)
-        _ax_r.set_ylim(0, 1.0)
-        _ax_l.grid(axis='y', color=_GRID_COLOR, linewidth=0.5, alpha=0.5)
-        for _sp in _ax_l.spines.values(): _sp.set_edgecolor(_GRID_COLOR)
-        for _sp in _ax_r.spines.values(): _sp.set_edgecolor(_GRID_COLOR)
-        fig_menu.canvas.draw()
-        bar_chart.background_snap = fig_menu.canvas.copy_from_bbox(_ax_l.bbox)
-        bar_chart.left_limit_max  = 0.0
-        bar_chart.right_limit_max = 0.0
-        bar_chart.prev_top5       = set()
-        bar_chart.last_chart_time = -1e9
-        bar_chart._setup_done     = True
-
-    elif idx == 1:   # ── WPM Trend ───────────────────────────────
-        ax_wpm = _make_plot_ax()
-        ax_wpm.set_title("Live WPM Trend  (Median Pre-filter → EMA)",
-                         color="white", fontsize=11, fontweight="bold", pad=10)
-        ax_wpm.set_xlabel("Session Time (s)", color=_FG_MUTED, fontsize=9)
-        ax_wpm.set_ylabel("Words Per Minute", color=_FG_MUTED, fontsize=9)
-        ax_wpm.grid(axis='y', color=_GRID_COLOR, linewidth=0.5, alpha=0.5)
-        ax_wpm.axhline(y=50,  color='#ffaa00', linestyle='--',
-                       linewidth=0.9, alpha=0.5)
-        ax_wpm.text(0.99, 50,  ' 50 WPM (beginner)',
-                    transform=ax_wpm.get_yaxis_transform(),
-                    va='bottom', ha='right', fontsize=7,
-                    color='#ffaa00', alpha=0.6)
-        ax_wpm.axhline(y=100, color='#00aaff', linestyle='--',
-                       linewidth=0.9, alpha=0.5)
-        ax_wpm.text(0.99, 100, ' 100 WPM (intermediate)',
-                    transform=ax_wpm.get_yaxis_transform(),
-                    va='bottom', ha='right', fontsize=7,
-                    color='#00aaff', alpha=0.6)
-        line_wpm_raw, = ax_wpm.plot([], [], color="#334466", alpha=0.35,
-                                    linewidth=0.8, label="Raw WPM")
-        line_wpm_ema, = ax_wpm.plot([], [], color="#00ffaa", alpha=0.95,
-                                    linewidth=2.2, label="EMA Trend")
-        ax_wpm.legend(loc="upper left", fontsize=8, framealpha=0.3,
-                      facecolor=_BG_DARK, edgecolor=_BG_BORDER,
-                      labelcolor=_FG_PRIMARY)
-        ax_wpm.set_xlim(0, 10)
-        ax_wpm.set_ylim(0, 10)
-
-    elif idx == 2:   # ── Regression Bar Chart ─────────────────────
-        reg_chart.fig = fig_menu
-        reg_chart.ax  = _make_plot_ax()
-        reg_chart.ax.set_facecolor(reg_chart.COLOR_BG)
-        reg_chart.ax.set_title(
-            "Most-Regressed Words  (inter-word regressions)",
-            color="white", fontsize=11, fontweight="bold", pad=10)
-        reg_chart.ax.set_xlabel("Regression count",
-                                color=_FG_MUTED, fontsize=9)
-        reg_chart.ax.text(0.5, 0.5, "No regressions recorded yet",
-                          transform=reg_chart.ax.transAxes,
-                          ha="center", va="center", fontsize=12,
-                          color=reg_chart.COLOR_EMPTY, fontstyle="italic")
-        reg_chart.ax.tick_params(colors="#777777")
-        for _sp in reg_chart.ax.spines.values():
-            _sp.set_edgecolor(_GRID_COLOR)
-        reg_chart._last_draw_time = -1e9   # force immediate redraw
-        reg_chart._setup_done = True
-
-    elif idx == 3:   # ── 2D Annotated Heatmap (replaces 3D Surface) ──
-        monitor_3d.figure = fig_menu
-        monitor_3d.Z_tot  = np.zeros((GRID, GRID))
-        monitor_3d.Z_diff = np.zeros((GRID, GRID))
-        monitor_3d.current_mode = 'tot'
-        # Main heatmap axes
-        _ax_hm = fig_menu.add_axes(
-            [_PLOT_LEFT, 0.08, 0.72 - _PLOT_LEFT, 0.84],
-            facecolor=_BG_DARK)
-        monitor_3d._heatmap_ax = _ax_hm
-        monitor_3d._heatmap_img = _ax_hm.imshow(
-            monitor_3d.Z_tot, cmap='YlOrRd', vmin=0, vmax=1.0,
-            interpolation='nearest', aspect='equal', origin='upper')
-        # Colorbar
-        _cbar = fig_menu.colorbar(monitor_3d._heatmap_img, ax=_ax_hm,
-                                   fraction=0.046, pad=0.04)
-        _cbar.ax.tick_params(colors=_FG_MUTED, labelsize=8)
-        _cbar.set_label('Time-on-Task (s)', color=_FG_PRIMARY, fontsize=9)
-        monitor_3d._heatmap_cbar = _cbar
-        # Cell text annotations
-        monitor_3d._heatmap_texts = {}
-        for _hr in range(GRID):
-            for _hc in range(GRID):
-                _word = get_word_from_touch(_hr, _hc) or '?'
-                _txt = _ax_hm.text(_hc, _hr, f'{_word}\n—',
-                                   ha='center', va='center',
-                                   fontsize=7, color='white',
-                                   fontweight='bold',
-                                   multialignment='center')
-                monitor_3d._heatmap_texts[(_hr, _hc)] = _txt
-        _ax_hm.set_xticks(range(GRID))
-        _ax_hm.set_xticklabels([f'C{i}' for i in range(GRID)],
-                                fontsize=8, color=_FG_MUTED)
-        _ax_hm.set_yticks(range(GRID))
-        _ax_hm.set_yticklabels([f'R{i}' for i in range(GRID)],
-                                fontsize=8, color=_FG_MUTED)
-        _ax_hm.set_title('Performance Heatmap  [V-6]',
-                         color='white', fontsize=11,
-                         fontweight='bold', pad=10)
-        _ax_hm.grid(False)
-        for _sp in _ax_hm.spines.values():
-            _sp.set_edgecolor(_GRID_COLOR)
-        # RadioButtons for mode toggle
-        _radio_ax_hm = fig_menu.add_axes([0.80, 0.35, 0.17, 0.20],
-                                          facecolor='#1a1a2e')
-        monitor_3d._radio = RadioButtons(
-            ax=_radio_ax_hm,
-            labels=['Time-on-Task', 'Mean Difficulty'], active=0)
-        for _lbl in monitor_3d._radio.labels:
-            _lbl.set_color(_FG_PRIMARY); _lbl.set_fontsize(8)
-        def _on_hm_mode(label):
-            monitor_3d.current_mode = 'tot' if 'Time' in label else 'diff'
-            monitor_3d.last_update = -1e9  # force redraw
-        monitor_3d._radio.on_clicked(_on_hm_mode)
-        monitor_3d.last_update = -1e9
-        monitor_3d._setup_done = True
-
-    elif idx == 4:   # ── Velocity Profile ─────────────────────────
-        vel_profile.figure = fig_menu
-        vel_profile.axes   = _make_plot_ax()
-        _ax_vp = vel_profile.axes
-        vel_profile.line_recent, = _ax_vp.plot(
-            [], [], color='#1f77b4', linewidth=2.5, alpha=1.0,
-            label='Most recent')
-        vel_profile.line_mean, = _ax_vp.plot(
-            [], [], color='#ff7f0e', linewidth=2, alpha=0.8,
-            linestyle='--', label='Weighted mean')
-        vel_profile.lines_past = []
-        for _ in range(vel_profile._n_overlay - 1):
-            _ln, = _ax_vp.plot([], [], color='gray',
-                               linewidth=0.8, alpha=0.15)
-            vel_profile.lines_past.append(_ln)
-        _ax_vp.axhline(y=0, color='white', linewidth=0.5,
-                       linestyle='-', alpha=0.3)
-        _ax_vp.set_xlabel('Step index', fontsize=9, color=_FG_MUTED)
-        _ax_vp.set_ylabel('Velocity (cells/sec)', fontsize=9,
-                          color=_FG_MUTED)
-        _ax_vp.set_title('Velocity Profile — last 20 touches  [V-7]',
-                         fontsize=11, fontweight='bold',
-                         color='white', pad=10)
-        _ax_vp.legend(loc='upper right', fontsize=8, framealpha=0.3,
-                      facecolor=_BG_DARK, edgecolor=_BG_BORDER,
-                      labelcolor=_FG_PRIMARY)
-        _ax_vp.grid(True, alpha=0.3, color=_GRID_COLOR)
-        vel_profile._last_update = -1e9
-        vel_profile._setup_done  = True
-
-    elif idx == 5:   # ── Path Efficiency ──────────────────────────
-        eff_plot.figure = fig_menu
-        eff_plot.axes   = _make_plot_ax()
-        _ax_ep = eff_plot.axes
-        # Connecting line (thin, shows progression between dots)
-        eff_plot.conn_line, = _ax_ep.plot(
-            [], [], color='#66aaff', linewidth=1.2, alpha=0.5,
-            zorder=2, label='Path')
-        # Scatter dots (larger, color-coded by tier, white edge)
-        eff_plot.scatter = _ax_ep.scatter(
-            [], [], s=50, alpha=0.85, zorder=5, edgecolors='white',
-            linewidths=0.3)
-        eff_plot.trend_line, = _ax_ep.plot(
-            [], [], color='#ff7f0e', linewidth=3.0, alpha=0.9,
-            label='Trend', zorder=6)
-        _ax_ep.axhline(y=0.8, color='#2ca02c', linewidth=1.5,
-                       linestyle='--', alpha=0.5,
-                       label='Proficiency target (η=0.8)', zorder=1)
-        # Colour-coded fill bands for efficiency tiers
-        _ax_ep.axhspan(0.8, 1.05, color='#2ca02c', alpha=0.06, zorder=0)
-        _ax_ep.axhspan(0.5, 0.8,  color='#ff7f0e', alpha=0.06, zorder=0)
-        _ax_ep.axhspan(0.0, 0.5,  color='#d62728', alpha=0.06, zorder=0)
-        # Tier labels on right edge
-        _ax_ep.text(0.99, 0.90, 'Proficient', transform=_ax_ep.transAxes,
-                    ha='right', va='center', fontsize=7, color='#2ca02c', alpha=0.7)
-        _ax_ep.text(0.99, 0.62, 'Developing', transform=_ax_ep.transAxes,
-                    ha='right', va='center', fontsize=7, color='#ff7f0e', alpha=0.7)
-        _ax_ep.text(0.99, 0.23, 'Struggling', transform=_ax_ep.transAxes,
-                    ha='right', va='center', fontsize=7, color='#d62728', alpha=0.7)
-        _ax_ep.set_xlabel('Contact # (press→release)', fontsize=9, color=_FG_MUTED)
-        _ax_ep.set_ylabel('Path efficiency (η)', fontsize=9,
-                          color=_FG_MUTED)
-        _ax_ep.set_title('Path Efficiency Over Session  [V-8]',
-                         fontsize=11, fontweight='bold',
-                         color='white', pad=10)
-        _ax_ep.set_ylim([0, 1.05])
-        _ax_ep.set_xlim([0, 10])
-        _ax_ep.legend(loc='lower right', fontsize=8, framealpha=0.3,
-                      facecolor=eff_plot.COLOR_BG, edgecolor=_BG_BORDER,
-                      labelcolor=_FG_PRIMARY)
-        _ax_ep.grid(True, alpha=0.3, color=_GRID_COLOR)
-        eff_plot._last_update = -1e9
-        eff_plot._setup_done  = True
-
-    # FIX 2: Render any already-accumulated data immediately on plot switch
-    if idx == 4 and vel_profile._setup_done:
-        with vel_profile._lock:
-            _has_vel_data = len(vel_profile._velocity_history) > 0
-        if _has_vel_data:
-            vel_profile._update_velocity_plot(time.time())
-
-    elif idx == 5 and eff_plot._setup_done:
-        with eff_plot._lock:
-            _has_eff_data = len(eff_plot.efficiency_history) >= 2
-        if _has_eff_data:
-            eff_plot._update_efficiency_plot(
-                len(eff_plot.event_indices), time.time())
-
-    _plot_inited[idx] = True
-    try:
-        fig_menu.canvas.draw_idle()
-    except Exception:
-        pass
-
-
-def _on_plot_select(label: str):
-    """RadioButtons callback — switch active plot."""
-    global _active_plot_idx
-    new_idx = PLOT_LABELS.index(label)
-    if new_idx == _active_plot_idx:
-        return  # already showing this plot
-    _active_plot_idx = new_idx
-    # Force re-init so axes are rebuilt cleanly
-    _plot_inited[_active_plot_idx] = False
-
-# Initialise the default plot (index 0) immediately.
-# _teardown_menu_plot_axes (called inside _init_plot) recreates the
-# RadioButtons widget and registers _on_plot_select automatically.
-_init_plot(_active_plot_idx)
-
-# Throttle for WPM trend plot updates (~2fps, separate from chart blit)
-_wpm_plot_last_update    = 0.0
-_WPM_PLOT_UPDATE_INTERVAL = 0.5
-
-fig = plt.figure(figsize=(16, 10), facecolor=_BG_DARK)
-# Leave bottom 18% of figure for threshold sliders + button
-gs  = gridspec.GridSpec(1, 3, width_ratios=[1.1, 0.85, 0.85], wspace=0.05,
-                        bottom=0.22, top=0.96)
-ax_heat    = fig.add_subplot(gs[0])
-ax_metrics = fig.add_subplot(gs[1])
-ax_words   = fig.add_subplot(gs[2])
-for ax in (ax_heat, ax_metrics, ax_words):
-    ax.set_facecolor(_BG_CARD)
-ax_metrics.axis("off")
-ax_words.axis("off")
-fig.patch.set_facecolor(_BG_DARK)
-
-# ── [Edit Words] button ────────────────────────────────────────
-ax_btn   = fig.add_axes([0.01, 0.005, 0.12, 0.035])
-btn_edit = mwidgets.Button(ax_btn, "✎ Edit Words",
-                           color="#161b22", hovercolor="#21262d")
-btn_edit.label.set_color(_ACCENT_BLUE)
-btn_edit.label.set_fontsize(9)
-btn_edit.label.set_fontfamily("sans-serif")
-btn_edit.on_clicked(lambda _: open_word_boundary_editor())
-
-# ── Threshold sliders (one per sensor row) ─────────────────────
-# Placed below the heatmap in the bottom margin of the figure.
-# Each slider adjusts ROW_THRESHOLDS[row] in real-time so both
-# the detection logic (analyse_touch → threshold_mask) and the
-# heatmap display threshold update instantly.
-from matplotlib.widgets import Slider as _Slider
-
-_thresh_slider_label = fig.text(
-    0.22, 0.195, "  ROW TOUCH THRESHOLDS  (drag to adjust live)",
-    fontsize=9, fontweight="bold", color=_ACCENT_ORANGE,
-    fontfamily="sans-serif", ha="center",
-)
-
-_threshold_sliders: list = []
-_slider_left   = 0.06          # left edge (figure fraction)
-_slider_width  = 0.32          # slider width
-_slider_height = 0.018         # per-slider height
-_slider_gap    = 0.004         # vertical gap between sliders
-_slider_base   = 0.015         # bottom of lowest slider
-
-for _i_sl in range(GRID):
-    _y_sl = _slider_base + (GRID - 1 - _i_sl) * (_slider_height + _slider_gap)
-    _ax_sl = fig.add_axes(
-        [_slider_left, _y_sl, _slider_width, _slider_height],
-        facecolor="#1a1a2e",
-    )
-    _init_val = float(ROW_THRESHOLDS[_i_sl])
-    _sl = _Slider(
-        _ax_sl,
-        f"R{_i_sl}",
-        valmin=0.0,
-        valmax=50.0,
-        valinit=_init_val,
-        valstep=0.5,
-        color="#e94560",
-        initcolor="none",
-    )
-    _sl.label.set_color("#a0c4ff")
-    _sl.label.set_fontsize(8)
-    _sl.label.set_fontfamily("monospace")
-    _sl.valtext.set_color(_FG_PRIMARY)
-    _sl.valtext.set_fontsize(8)
-
-    # Closure: capture _i_sl by default arg
-    def _on_thresh_change(val, row=_i_sl):
-        ROW_THRESHOLDS[row] = val
-    _sl.on_changed(_on_thresh_change)
-    _threshold_sliders.append(_sl)
-
-# ── Heatmap ────────────────────────────────────────────────────
-Z    = np.zeros((GRID, GRID))
-hmap = ax_heat.imshow(Z, cmap=_cmap, vmin=0, vmax=150,
-                      interpolation="nearest", aspect="equal")
-
-ax_heat.set_title(
-    "Touch Pressure Map  (raw sensor layout)\n"
-    "Cell labels show word at logical (TX-shifted) position",
-    color="white", fontsize=11, fontweight="bold", pad=10)
-ax_heat.set_xlabel("Column →   C0 … C6   (RX)", color=_FG_MUTED, fontsize=9)
-ax_heat.set_ylabel("Row ↓   R0 … R6   (TX mux)", color=_FG_MUTED, fontsize=9)
-ax_heat.tick_params(colors="#777777")
-for sp in ax_heat.spines.values():
-    sp.set_edgecolor(_GRID_COLOR)
-
-ax_heat.set_xticks(np.arange(-0.5, GRID, 1), minor=True)
-ax_heat.set_yticks(np.arange(-0.5, GRID, 1), minor=True)
-ax_heat.grid(which="minor", color=_GRID_COLOR, linewidth=0.8)
-ax_heat.tick_params(which="minor", length=0)
-
-ax_heat.set_xticks(range(GRID))
-ax_heat.set_xticklabels([f"C{i}" for i in range(GRID)],
-                        color=_FG_MUTED, fontsize=8)
-ax_heat.set_yticks(range(GRID))
-ax_heat.set_yticklabels([f"R{i}" for i in range(GRID)],
-                        color=_FG_MUTED, fontsize=8)
-
-# ── Cell label text objects ────────────────────────────────────
-_cell_texts: dict = {}
-for r in range(GRID):
-    for raw_c in range(GRID):
-        logical_c = (raw_c + TX_SHIFT) % GRID
-        coord_str = f"{r},{logical_c}"
-        with _cell_word_cache_lock:
-            word_str = _cell_word_cache.get((r, raw_c), "")
-        label = f"{coord_str}\n{word_str}" if word_str else coord_str
-        txt = ax_heat.text(raw_c, r, label,
-                           ha="center", va="center",
-                           fontsize=5.5, color="#5a8a5a",
-                           multialignment="center")
-        _cell_texts[(r, raw_c)] = txt
-
-# ── Metrics text ───────────────────────────────────────────────
-metrics_txt = ax_metrics.text(
-    0.05, 0.97, "Loading…",
-    transform=ax_metrics.transAxes,
-    fontsize=10.5, va="top", ha="left",
-    family="sans-serif", color=_FG_PRIMARY, linespacing=1.85,
-)
-
-# ── Word-stats text ────────────────────────────────────────────
-words_txt = ax_words.text(
-    0.05, 0.97, "Loading…",
-    transform=ax_words.transAxes,
-    fontsize=10.0, va="top", ha="left",
-    family="sans-serif", color=_FG_PRIMARY, linespacing=1.75,
-)
-
-disp_Z  = np.zeros((GRID, GRID))
-last_ui = time.time()
-ui_dt   = 1.0 / UI_FPS
-
-# ── Blit infrastructure for fast heatmap rendering ─────────────
-# Instead of calling fig.canvas.draw_idle() every frame (which triggers
-# a full ~500ms canvas redraw), we use blitting:
-#   Fast path (~3ms):  restore background → draw heatmap artist → blit region
-#   Slow path (~50ms): full draw() at 2fps when text/snapshot data changes
-fig.canvas.draw()
-_main_bg = fig.canvas.copy_from_bbox(ax_heat.bbox)
-_needs_full_redraw = False
-
-def _on_main_resize(event=None):
-    global _main_bg
-    fig.canvas.draw()
-    _main_bg = fig.canvas.copy_from_bbox(ax_heat.bbox)
-
-fig.canvas.mpl_connect('resize_event', _on_main_resize)
-
-# ── Fix 3: Stop flag — set when either window is closed ───────
-_ui_stop = threading.Event()
-
-def _on_fig_close(event):
-    """Close either window → signal the UI loop to exit."""
-    _ui_stop.set()
-
-fig.canvas.mpl_connect("close_event", _on_fig_close)
-fig_menu.canvas.mpl_connect("close_event", _on_fig_close)
-
-# ─────────────────────── UI loop ──────────────────────────────
-try:
-    while not _ui_stop.is_set():
-        now = time.time()
-        if now - last_ui < ui_dt:
-            time.sleep(max(0.0, ui_dt - (now - last_ui)))
-            continue
-        last_ui = now
-
-        # ── B4: Only copy frame if reader delivered a new one ──
-        with latest_frame_lk:
-            _cur_gen = _frame_gen
-            frame = latest_frame.copy()
-
-        # ── C2: Vectorised numpy ops — no Python loops ────────
-        np.subtract(frame, baseline, out=_raw_delta_buf)
-        np.clip(_raw_delta_buf, 0.0, None, out=_raw_delta_buf)
-        np.multiply(_raw_delta_buf,
-                     _raw_delta_buf >= ROW_THRESHOLDS[:, np.newaxis],
-                     out=_thresh_buf)
-
-        hmap.set_data(_thresh_buf)
-        pk = float(_thresh_buf.max())
-        hmap.set_clim(0, max(30.0, pk * 1.15))
-
-        # ── A3: Refresh cell labels ONLY when boundaries change ─
-        if _cell_labels_dirty:
-            _cell_labels_dirty = False
-            _needs_full_redraw = True
-            with _cell_word_cache_lock:
-                cache_snap = dict(_cell_word_cache)
-            for r in range(GRID):
-                for raw_c in range(GRID):
-                    logical_c = (raw_c + TX_SHIFT) % GRID
-                    coord_str = f"{r},{logical_c}"
-                    word_str  = cache_snap.get((r, raw_c), "")
-                    label = f"{coord_str}\n{word_str}" if word_str else coord_str
-                    _cell_texts[(r, raw_c)].set_text(label)
-
-        # ── B1: Throttled snapshot cache — heavy ops at 2fps ────
-        _snap_now = time.time()
-        if _cached_ws is None or (_snap_now - _last_snapshot_time) >= _SNAPSHOT_INTERVAL:
-            _last_snapshot_time = _snap_now
-            _cached_diff_snap   = cell_diff.snapshot()
-            _cached_ws          = word_stats.snapshot()
-            _cached_ewiqr_snap  = ewiqr_tracker.snapshot()
-            _cached_welford_snap = welford_per_word.snapshot()
-            _cached_vt          = velocity_tracker.snapshot()
+        if idx == 0:   # ── Per-Word Bar Chart ──────────────────────
+            # BarChartBlit.setup() creates its own fig; we redirect it
+            # to use axes inside fig_menu instead.
             with word_boundaries_lock:
-                _cached_wb_snap = {k: list(v) for k, v in word_boundaries.items()}
-            _cached_skip_snap = compute_skip_stats(_cached_wb_snap, _cached_ws["word_count"])
-            _needs_full_redraw = True   # snapshot data changed → schedule full redraw for text panels
+                _wb_for_chart = {k: list(v) for k, v in word_boundaries.items()}
+            # Build word list — dynamic count based on user block-width config
+            bar_chart.word_list = []
+            for _ri in range(GRID):
+                for _e in _wb_for_chart.get(_ri, []):
+                    bar_chart.word_list.append(_e["word"])
+            n_words = len(bar_chart.word_list)
+            x_pos   = np.arange(n_words)
+            bar_width = 0.35
+            tab10 = plt.cm.tab10
+            # Use a wide axes for the bar chart
+            _ax_l = fig_menu.add_axes(
+                [_PLOT_LEFT, 0.18, 1.0-_PLOT_LEFT-0.10, 0.75],
+                facecolor=_BG_DARK)
+            _ax_r = _ax_l.twinx()
+            bar_chart.fig        = fig_menu
+            bar_chart.ax_left    = _ax_l
+            bar_chart.ax_right   = _ax_r
+            # Build per-word row mapping for color assignment
+            _word_row_map = []
+            for _ri in range(GRID):
+                for _e in _wb_for_chart.get(_ri, []):
+                    _word_row_map.append(_ri)
+            bar_chart.primary_bars = []
+            bar_chart.count_bars   = []
+            for _i in range(n_words):
+                _row = _word_row_map[_i] if _i < len(_word_row_map) else 0
+                _col = tab10(_row)
+                bar_chart.primary_bars.append(
+                    _ax_l.bar(_i - bar_width/2, 0, bar_width,
+                              color=_col, alpha=1.0, edgecolor='none')[0])
+                bar_chart.count_bars.append(
+                    _ax_r.bar(_i + bar_width/2, 0, bar_width,
+                              color=_col, alpha=0.3, edgecolor='none')[0])
+            _ec = _ax_l.errorbar(x_pos, np.zeros(n_words), yerr=np.zeros(n_words),
+                                 fmt='none', ecolor='#ffffff', elinewidth=0.8,
+                                 capsize=2, capthick=0.6, alpha=0.5)
+            bar_chart.error_caps_lo = _ec[1][0] if len(_ec[1]) > 0 else None
+            bar_chart.error_caps_hi = _ec[1][1] if len(_ec[1]) > 1 else None
+            bar_chart.error_stems   = _ec[2][0] if len(_ec[2]) > 0 else None
+            bar_chart.asterisk_texts = []
+            for _i in range(n_words):
+                bar_chart.asterisk_texts.append(
+                    _ax_l.text(_i, 0, "*", ha='center', va='bottom',
+                               fontsize=14, fontweight='bold',
+                               color='#ff4444', visible=False))
+            bar_chart.hline = _ax_l.axhline(
+                y=0, color='#00ffaa', linestyle='--', linewidth=1.2, alpha=0.7)
+            _ax_l.set_xticks(x_pos)
+            _ax_l.set_xticklabels(bar_chart.word_list, rotation=45, ha='right',
+                                   fontsize=7, color=_FG_MUTED)
+            _ax_l.set_ylabel('Time-on-Task (s)', color=_FG_PRIMARY, fontsize=9)
+            _ax_r.set_ylabel('Touch Count',      color=_FG_PRIMARY, fontsize=9)
+            _ax_l.tick_params(axis='y', colors=_FG_MUTED)
+            _ax_r.tick_params(axis='y', colors=_FG_MUTED)
+            _ax_l.set_title('Per-Word Performance  (Time-on-Task & Touch Counts)',
+                            color='white', fontsize=11, fontweight='bold', pad=10)
+            _ax_l.set_xlim(-0.5, n_words - 0.5)
+            _ax_l.set_ylim(0, 1.0)
+            _ax_r.set_ylim(0, 1.0)
+            _ax_l.grid(axis='y', color=_GRID_COLOR, linewidth=0.5, alpha=0.5)
+            for _sp in _ax_l.spines.values(): _sp.set_edgecolor(_GRID_COLOR)
+            for _sp in _ax_r.spines.values(): _sp.set_edgecolor(_GRID_COLOR)
+            fig_menu.canvas.draw()
+            bar_chart.background_snap = fig_menu.canvas.copy_from_bbox(_ax_l.bbox)
+            bar_chart.left_limit_max  = 0.0
+            bar_chart.right_limit_max = 0.0
+            bar_chart.prev_top5       = set()
+            bar_chart.last_chart_time = -1e9
+            bar_chart._setup_done     = True
 
-        # ── A4: Chart updates — only update the ACTIVE plot ─────────────
-        # Skipping all chart work for hidden plots eliminates the biggest
-        # source of frame-drop latency in the original design.
-        _chart_now = time.time()
+        elif idx == 1:   # ── WPM Trend ───────────────────────────────
+            ax_wpm = _make_plot_ax()
+            ax_wpm.set_title("Live WPM Trend  (Median Pre-filter → EMA)",
+                             color="white", fontsize=11, fontweight="bold", pad=10)
+            ax_wpm.set_xlabel("Session Time (s)", color=_FG_MUTED, fontsize=9)
+            ax_wpm.set_ylabel("Words Per Minute", color=_FG_MUTED, fontsize=9)
+            ax_wpm.grid(axis='y', color=_GRID_COLOR, linewidth=0.5, alpha=0.5)
+            ax_wpm.axhline(y=50,  color='#ffaa00', linestyle='--',
+                           linewidth=0.9, alpha=0.5)
+            ax_wpm.text(0.99, 50,  ' 50 WPM (beginner)',
+                        transform=ax_wpm.get_yaxis_transform(),
+                        va='bottom', ha='right', fontsize=7,
+                        color='#ffaa00', alpha=0.6)
+            ax_wpm.axhline(y=100, color='#00aaff', linestyle='--',
+                           linewidth=0.9, alpha=0.5)
+            ax_wpm.text(0.99, 100, ' 100 WPM (intermediate)',
+                        transform=ax_wpm.get_yaxis_transform(),
+                        va='bottom', ha='right', fontsize=7,
+                        color='#00aaff', alpha=0.6)
+            line_wpm_raw, = ax_wpm.plot([], [], color="#334466", alpha=0.35,
+                                        linewidth=0.8, label="Raw WPM")
+            line_wpm_ema, = ax_wpm.plot([], [], color="#00ffaa", alpha=0.95,
+                                        linewidth=2.2, label="EMA Trend")
+            ax_wpm.legend(loc="upper left", fontsize=8, framealpha=0.3,
+                          facecolor=_BG_DARK, edgecolor=_BG_BORDER,
+                          labelcolor=_FG_PRIMARY)
+            ax_wpm.set_xlim(0, 10)
+            ax_wpm.set_ylim(0, 10)
 
-        if (_active_plot_idx == 0 and bar_chart._setup_done
-                and _cached_welford_snap is not None
-                and _cached_ws is not None):
-            # ── Per-Word Bar Chart (only when selected) ────────────
-            if (_chart_now - bar_chart.last_chart_time) >= BAR_CHART_UPDATE_INTERVAL:
-                _tot_per_word = {}
-                _std_per_word = {}
-                for _w, _wf in _cached_welford_snap.items():
-                    _tot_per_word[_w] = _wf["mean"]
-                    _std_per_word[_w] = _wf["std"]
-                _mean_D_per_word = {}
-                _wc = _cached_ws["word_count"]
-                _ewiqr_pw = _cached_ewiqr_snap.get("ewiqr_per_word", {})
-                for _w in _wc:
-                    _mean_D_per_word[_w] = _ewiqr_pw.get(_w, 0.0)
-                _session_avg = 0.0
-                if _cached_welford_snap:
-                    _total_n = sum(v["n"] for v in _cached_welford_snap.values())
-                    if _total_n > 0:
-                        _session_avg = sum(
-                            v["mean"] * v["n"]
-                            for v in _cached_welford_snap.values()) / _total_n
-                bar_chart.update(
-                    tot_per_word=_tot_per_word,
-                    std_per_word=_std_per_word,
-                    word_count=_wc,
-                    mean_D_per_word=_mean_D_per_word,
-                    session_avg_duration=_session_avg,
-                )
+        elif idx == 2:   # ── Regression Bar Chart ─────────────────────
+            reg_chart.fig = fig_menu
+            reg_chart.ax  = _make_plot_ax()
+            reg_chart.ax.set_facecolor(reg_chart.COLOR_BG)
+            reg_chart.ax.set_title(
+                "Most-Regressed Words  (inter-word regressions)",
+                color="white", fontsize=11, fontweight="bold", pad=10)
+            reg_chart.ax.set_xlabel("Regression count",
+                                    color=_FG_MUTED, fontsize=9)
+            reg_chart.ax.text(0.5, 0.5, "No regressions recorded yet",
+                              transform=reg_chart.ax.transAxes,
+                              ha="center", va="center", fontsize=12,
+                              color=reg_chart.COLOR_EMPTY, fontstyle="italic")
+            reg_chart.ax.tick_params(colors="#777777")
+            for _sp in reg_chart.ax.spines.values():
+                _sp.set_edgecolor(_GRID_COLOR)
+            reg_chart._last_draw_time = -1e9   # force immediate redraw
+            reg_chart._setup_done = True
 
-        elif _active_plot_idx == 2 and reg_chart._setup_done:
-            # ── Regression Bar Chart (only when selected) ──────────
-            if (_chart_now - reg_chart._last_draw_time) >= REGRESSION_CHART_UPDATE_INTERVAL:
-                with word_stats._lock:
-                    _full_reg_count = dict(word_stats._regression_count)
-                reg_chart.update(_full_reg_count, _cached_ws["flagged_words"])
+        elif idx == 3:   # ── 2D Annotated Heatmap (replaces 3D Surface) ──
+            monitor_3d.figure = fig_menu
+            monitor_3d.Z_tot  = np.zeros((GRID, GRID))
+            monitor_3d.Z_diff = np.zeros((GRID, GRID))
+            monitor_3d.current_mode = 'tot'
+            # Main heatmap axes
+            _ax_hm = fig_menu.add_axes(
+                [_PLOT_LEFT, 0.08, 0.72 - _PLOT_LEFT, 0.84],
+                facecolor=_BG_DARK)
+            monitor_3d._heatmap_ax = _ax_hm
+            monitor_3d._heatmap_img = _ax_hm.imshow(
+                monitor_3d.Z_tot, cmap='YlOrRd', vmin=0, vmax=1.0,
+                interpolation='nearest', aspect='equal', origin='upper')
+            # Colorbar
+            _cbar = fig_menu.colorbar(monitor_3d._heatmap_img, ax=_ax_hm,
+                                       fraction=0.046, pad=0.04)
+            _cbar.ax.tick_params(colors=_FG_MUTED, labelsize=8)
+            _cbar.set_label('Time-on-Task (s)', color=_FG_PRIMARY, fontsize=9)
+            monitor_3d._heatmap_cbar = _cbar
+            # Cell text annotations
+            monitor_3d._heatmap_texts = {}
+            for _hr in range(GRID):
+                for _hc in range(GRID):
+                    _word = get_word_from_touch(_hr, _hc) or '?'
+                    _txt = _ax_hm.text(_hc, _hr, f'{_word}\n—',
+                                       ha='center', va='center',
+                                       fontsize=7, color='white',
+                                       fontweight='bold',
+                                       multialignment='center')
+                    monitor_3d._heatmap_texts[(_hr, _hc)] = _txt
+            _ax_hm.set_xticks(range(GRID))
+            _ax_hm.set_xticklabels([f'C{i}' for i in range(GRID)],
+                                    fontsize=8, color=_FG_MUTED)
+            _ax_hm.set_yticks(range(GRID))
+            _ax_hm.set_yticklabels([f'R{i}' for i in range(GRID)],
+                                    fontsize=8, color=_FG_MUTED)
+            _ax_hm.set_title('Performance Heatmap  [V-6]',
+                             color='white', fontsize=11,
+                             fontweight='bold', pad=10)
+            _ax_hm.grid(False)
+            for _sp in _ax_hm.spines.values():
+                _sp.set_edgecolor(_GRID_COLOR)
+            # RadioButtons for mode toggle
+            _radio_ax_hm = fig_menu.add_axes([0.80, 0.35, 0.17, 0.20],
+                                              facecolor='#1a1a2e')
+            monitor_3d._radio = RadioButtons(
+                ax=_radio_ax_hm,
+                labels=['Time-on-Task', 'Mean Difficulty'], active=0)
+            for _lbl in monitor_3d._radio.labels:
+                _lbl.set_color(_FG_PRIMARY); _lbl.set_fontsize(8)
+            def _on_hm_mode(label):
+                monitor_3d.current_mode = 'tot' if 'Time' in label else 'diff'
+                monitor_3d.last_update = -1e9  # force redraw
+            monitor_3d._radio.on_clicked(_on_hm_mode)
+            monitor_3d.last_update = -1e9
+            monitor_3d._setup_done = True
 
-        elif _active_plot_idx == 3 and monitor_3d._setup_done:
-            # ── 2D Annotated Heatmap (replaces old 3D surface) ──────
-            if (_chart_now - monitor_3d.last_update) >= SURFACE_3D_UPDATE_INTERVAL:
-                monitor_3d.last_update = _chart_now
-                _wb_hm    = _cached_wb_snap
-                _Z_tot_hm = np.zeros((GRID, GRID))
-                for _r_hm in range(GRID):
-                    for _e_hm in _wb_hm.get(_r_hm, []):
-                        _w_hm  = _e_hm["word"]
-                        _wf_hm = _cached_welford_snap.get(_w_hm)
-                        if _wf_hm:
-                            for _c_hm in range(_e_hm["start"], _e_hm["end"] + 1):
-                                if 0 <= _c_hm < GRID:
-                                    _Z_tot_hm[_r_hm, _c_hm] = _wf_hm["mean"]
-                _Z_diff_hm = np.zeros((GRID, GRID))
-                _ewiqr_hm  = _cached_ewiqr_snap.get("ewiqr_per_word", {})
-                for _r_hm in range(GRID):
-                    for _e_hm in _wb_hm.get(_r_hm, []):
-                        _w_hm = _e_hm["word"]
-                        if _w_hm in _ewiqr_hm:
-                            for _c_hm in range(_e_hm["start"], _e_hm["end"] + 1):
-                                if 0 <= _c_hm < GRID:
-                                    _Z_diff_hm[_r_hm, _c_hm] = _ewiqr_hm[_w_hm]
-                monitor_3d.Z_tot  = _Z_tot_hm
-                monitor_3d.Z_diff = _Z_diff_hm
-                # Pick data based on mode toggle
-                _Z_show = _Z_tot_hm if monitor_3d.current_mode == 'tot' else _Z_diff_hm
-                _z_max = float(_Z_show.max()) if _Z_show.max() > 0 else 1.0
-                monitor_3d._heatmap_img.set_data(_Z_show)
-                monitor_3d._heatmap_img.set_clim(0, _z_max)
-                _mode_label = 'Time-on-Task (s)' if monitor_3d.current_mode == 'tot' else 'EWIQR Difficulty'
-                monitor_3d._heatmap_cbar.set_label(_mode_label, color=_FG_PRIMARY, fontsize=9)
-                # Update cell annotations
-                for _r_hm in range(GRID):
-                    for _c_hm in range(GRID):
-                        _word = get_word_from_touch(_r_hm, _c_hm) or '?'
-                        _val = _Z_show[_r_hm, _c_hm]
-                        _val_str = f'{_val:.2f}' if _val > 0 else '—'
-                        # High-value cells get dark text for contrast
-                        _txt_color = _BG_DARK if _val > _z_max * 0.6 else 'white'
-                        _t = monitor_3d._heatmap_texts[(_r_hm, _c_hm)]
-                        _t.set_text(f'{_word}\n{_val_str}')
-                        _t.set_color(_txt_color)
-                monitor_3d._heatmap_ax.set_title(
-                    f'Performance Heatmap — {_mode_label}  [V-6]',
-                    color='white', fontsize=11, fontweight='bold', pad=10)
+        elif idx == 4:   # ── Velocity Profile ─────────────────────────
+            vel_profile.figure = fig_menu
+            vel_profile.axes   = _make_plot_ax()
+            _ax_vp = vel_profile.axes
+            vel_profile.line_recent, = _ax_vp.plot(
+                [], [], color='#1f77b4', linewidth=2.5, alpha=1.0,
+                label='Most recent')
+            vel_profile.line_mean, = _ax_vp.plot(
+                [], [], color='#ff7f0e', linewidth=2, alpha=0.8,
+                linestyle='--', label='Weighted mean')
+            vel_profile.lines_past = []
+            for _ in range(vel_profile._n_overlay - 1):
+                _ln, = _ax_vp.plot([], [], color='gray',
+                                   linewidth=0.8, alpha=0.15)
+                vel_profile.lines_past.append(_ln)
+            _ax_vp.axhline(y=0, color='white', linewidth=0.5,
+                           linestyle='-', alpha=0.3)
+            _ax_vp.set_xlabel('Step index', fontsize=9, color=_FG_MUTED)
+            _ax_vp.set_ylabel('Velocity (cells/sec)', fontsize=9,
+                              color=_FG_MUTED)
+            _ax_vp.set_title('Velocity Profile — last 20 touches  [V-7]',
+                             fontsize=11, fontweight='bold',
+                             color='white', pad=10)
+            _ax_vp.legend(loc='upper right', fontsize=8, framealpha=0.3,
+                          facecolor=_BG_DARK, edgecolor=_BG_BORDER,
+                          labelcolor=_FG_PRIMARY)
+            _ax_vp.grid(True, alpha=0.3, color=_GRID_COLOR)
+            vel_profile._last_update = -1e9
+            vel_profile._setup_done  = True
 
-        elif _active_plot_idx == 1 and ax_wpm is not None and line_wpm_raw is not None:
-            # ── V-4: WPM Trend plot (only when that plot is selected) ──
-            _now_wpm_plot = time.time()
-            if (_now_wpm_plot - _wpm_plot_last_update) >= _WPM_PLOT_UPDATE_INTERVAL:
-                _wpm_plot_last_update = _now_wpm_plot
-                x_raw_wpm, y_raw_wpm, y_ema_wpm, y_max_wpm = wpm_trend.get_plot_data()
-                if x_raw_wpm:
-                    line_wpm_raw.set_data(x_raw_wpm, y_raw_wpm)
-                    line_wpm_ema.set_data(x_raw_wpm, y_ema_wpm)
-                    ax_wpm.set_ylim(0, max(10, y_max_wpm))
-                    ax_wpm.set_xlim(x_raw_wpm[0], max(x_raw_wpm[-1], 10))
-                    fig_menu.canvas.draw_idle()
+        elif idx == 5:   # ── Path Efficiency ──────────────────────────
+            eff_plot.figure = fig_menu
+            eff_plot.axes   = _make_plot_ax()
+            _ax_ep = eff_plot.axes
+            # Connecting line (thin, shows progression between dots)
+            eff_plot.conn_line, = _ax_ep.plot(
+                [], [], color='#66aaff', linewidth=1.2, alpha=0.5,
+                zorder=2, label='Path')
+            # Scatter dots (larger, color-coded by tier, white edge)
+            eff_plot.scatter = _ax_ep.scatter(
+                [], [], s=50, alpha=0.85, zorder=5, edgecolors='white',
+                linewidths=0.3)
+            eff_plot.trend_line, = _ax_ep.plot(
+                [], [], color='#ff7f0e', linewidth=3.0, alpha=0.9,
+                label='Trend', zorder=6)
+            _ax_ep.axhline(y=0.8, color='#2ca02c', linewidth=1.5,
+                           linestyle='--', alpha=0.5,
+                           label='Proficiency target (η=0.8)', zorder=1)
+            # Colour-coded fill bands for efficiency tiers
+            _ax_ep.axhspan(0.8, 1.05, color='#2ca02c', alpha=0.06, zorder=0)
+            _ax_ep.axhspan(0.5, 0.8,  color='#ff7f0e', alpha=0.06, zorder=0)
+            _ax_ep.axhspan(0.0, 0.5,  color='#d62728', alpha=0.06, zorder=0)
+            # Tier labels on right edge
+            _ax_ep.text(0.99, 0.90, 'Proficient', transform=_ax_ep.transAxes,
+                        ha='right', va='center', fontsize=7, color='#2ca02c', alpha=0.7)
+            _ax_ep.text(0.99, 0.62, 'Developing', transform=_ax_ep.transAxes,
+                        ha='right', va='center', fontsize=7, color='#ff7f0e', alpha=0.7)
+            _ax_ep.text(0.99, 0.23, 'Struggling', transform=_ax_ep.transAxes,
+                        ha='right', va='center', fontsize=7, color='#d62728', alpha=0.7)
+            _ax_ep.set_xlabel('Contact # (press→release)', fontsize=9, color=_FG_MUTED)
+            _ax_ep.set_ylabel('Path efficiency (η)', fontsize=9,
+                              color=_FG_MUTED)
+            _ax_ep.set_title('Path Efficiency Over Session  [V-8]',
+                             fontsize=11, fontweight='bold',
+                             color='white', pad=10)
+            _ax_ep.set_ylim([0, 1.05])
+            _ax_ep.set_xlim([0, 10])
+            _ax_ep.legend(loc='lower right', fontsize=8, framealpha=0.3,
+                          facecolor=eff_plot.COLOR_BG, edgecolor=_BG_BORDER,
+                          labelcolor=_FG_PRIMARY)
+            _ax_ep.grid(True, alpha=0.3, color=_GRID_COLOR)
+            eff_plot._last_update = -1e9
+            eff_plot._setup_done  = True
 
-        # ── Plots 4 & 5: rendered exclusively from the main thread ────────
-        # Background thread (metrics_thread) sets _pending_render=True when
-        # new data arrives.  We pick it up here, safely on the main thread.
-        # We also do a throttled periodic redraw so switching TO these plots
-        # after events have already been recorded still shows the data.
-        elif _active_plot_idx == 4 and vel_profile._setup_done:
-            _vel_needs_render = vel_profile._pending_render
-            # Also re-render periodically (every 0.5s) to catch data already in the buffer
-            if not _vel_needs_render:
-                _vel_needs_render = (time.time() - vel_profile._last_update) >= VEL_PROFILE_UPDATE_INTERVAL
-                with vel_profile._lock:
-                    _vel_needs_render = _vel_needs_render and len(vel_profile._velocity_history) > 0
-            if _vel_needs_render:
-                vel_profile._pending_render = False
+        # FIX 2: Render any already-accumulated data immediately on plot switch
+        if idx == 4 and vel_profile._setup_done:
+            with vel_profile._lock:
+                _has_vel_data = len(vel_profile._velocity_history) > 0
+            if _has_vel_data:
                 vel_profile._update_velocity_plot(time.time())
 
-        elif _active_plot_idx == 5 and eff_plot._setup_done:
-            _eff_needs_render = eff_plot._pending_render
-            # Also re-render periodically (every 0.5s) to catch data already in the buffer
-            if not _eff_needs_render:
-                _eff_needs_render = (time.time() - eff_plot._last_update) >= EFFICIENCY_PLOT_UPDATE_INTERVAL
-                with eff_plot._lock:
-                    _eff_needs_render = _eff_needs_render and len(eff_plot.efficiency_history) >= 2
-            if _eff_needs_render:
-                eff_plot._pending_render = False
-                with eff_plot._lock:
-                    _ec = len(eff_plot.event_indices)
-                eff_plot._update_efficiency_plot(_ec, time.time())
+        elif idx == 5 and eff_plot._setup_done:
+            with eff_plot._lock:
+                _has_eff_data = len(eff_plot.efficiency_history) >= 2
+            if _has_eff_data:
+                eff_plot._update_efficiency_plot(
+                    len(eff_plot.event_indices), time.time())
 
-        # Use cached values for everything below
-        diff_snap    = _cached_diff_snap
-        ws           = _cached_ws
-        ewiqr_snap   = _cached_ewiqr_snap
-        welford_snap = _cached_welford_snap
-        vt           = _cached_vt
-        skip_snap    = _cached_skip_snap
-
-        # ── Hardest sensor cell ───────────────────────────────
-        if diff_snap:
-            hardest_cell = max(diff_snap, key=diff_snap.get)
-            hardest_d    = diff_snap[hardest_cell]
-            hardest_str  = f"({hardest_cell[0]},{hardest_cell[1]})  D={hardest_d:.2f}"
-        else:
-            hardest_str = "n/a"
-
-        # ── Metrics panel (simplified grouped cards) ────────────
-        m  = perf.snapshot
-        cw = m.get("current_word", "")
-        cw_str = cw if cw else "—"
-
-        # Per-finger WPM (from cached values)
-        _f0_wpm = _cached_finger_wpm[0]
-        _f1_wpm = _cached_finger_wpm[1]
-
-        # Determine finger activity from perf live state
-        _is_touching = m["is_touching"]
-        st_icon = "●" if _is_touching else "○"
-
-        # Traffic-light indicators
-        _wpm = m['wpm']
-        _wpm_dot = "🟢" if _wpm >= 50 else ("🟡" if _wpm >= 20 else "🔴")
-        _eff = eff_plot.get_avg_efficiency()
-        _eff_dot = "🟢" if _eff >= 0.8 else ("🟡" if _eff >= 0.5 else "🔴")
-        _diff = m['avg_difficulty']
-        _diff_dot = "🟢" if _diff < 1.0 else ("🟡" if _diff < 2.0 else "🔴")
-
-        lines = [
-            f"  {st_icon} {cw_str:^18s}  {m['pressed_cells']} cells",
-            "",
-            "  ── SPEED ────────────────────",
-            f"  {_wpm_dot} {_wpm:.0f} WPM  (trend {wpm_trend.get_current_ema():.0f})",
-            f"    F0: {_f0_wpm:.0f} WPM   F1: {_f1_wpm:.0f} WPM",
-            f"    {m['chars_total']} chars  {m['chars_window']} in window",
-            f"    {m['avg_duration']*1000:.0f} ms/touch",
-            "",
-            "  ── ACCURACY ─────────────────",
-            f"  {_eff_dot} Path η={_eff:.2f}",
-            f"    Backtracks: {m['total_backtracks']}",
-            f"    Regressions: {ws['total_regressions']}",
-            f"    Hesitation: {ws['hesitation_rate']*100:.0f}%",
-            "",
-            "  ── DIFFICULTY ────────────────",
-            f"  {_diff_dot} Avg D={_diff:.2f}",
-            f"    Reversals: {m['avg_reversals']:.1f}",
-            f"    Word rev: {m['word_reversals_total']}",
-            f"    Hardest: {hardest_str}",
-            "",
-            "  ── VELOCITY ─────────────────",
-            f"    Speed: {vt['mean_vel']:.1f} cells/s",
-            f"    IQR: {vt['iqr']:.2f}  ({vt['n_events']} events)",
-            f"    Consistency: {vt['consistency']:.2f}",
-        ]
-
-        # Top EWIQR hardest word (just 1 line summary)
-        top5 = ewiqr_snap.get("top5_hardest", [])
-        if top5:
-            _tw, _tiq = top5[0]
-            lines.append(f"\n  Hardest word: {_tw} (IQR={_tiq:.2f}s)")
-
-        metrics_txt.set_text("\n".join(lines))
-
-        # ── Word-stats panel (simplified) ─────────────────────
-        wc = ws["word_count"]
-        top_words = sorted(wc.items(), key=lambda x: x[1], reverse=True)[:5]
-        seq_display = " → ".join(ws["touch_sequence"][-5:]) \
-                      if ws["touch_sequence"] else "—"
-
-        flagged = ws["flagged_words"]
-        flagged_str = (", ".join(flagged[:3]) if flagged else "none")
-
-        word_lines = [
-            "  ┌─ WORDS ────────────────────┐",
-            f"  │  Touches: {ws['total_registered']}",
-            f"  │  Most: {ws['most_touched'] or '—'}",
-            f"  │  Hardest: {ws['hardest_word'] or '—'}",
-            "  └────────────────────────────┘",
-            "",
-            "  ┌─ TOP WORDS ────────────────┐",
-        ]
-        for w, n in top_words:
-            word_lines.append(f"  │  {w:<10s} {n}")
-        if not top_words:
-            word_lines.append("  │  (no touches yet)")
-        word_lines += [
-            "  └────────────────────────────┘",
-            "",
-            "  ┌─ REGRESSIONS ──────────────┐",
-            f"  │  Total: {ws['total_regressions']}",
-            f"  │  Flagged: {flagged_str}",
-            "  └────────────────────────────┘",
-            "",
-            "  ┌─ COVERAGE ────────────────┐",
-            f"  │  Skip rate: {skip_snap['skip_rate']:.0f}%",
-            f"  │  Missing: {len(skip_snap['skipped_words'])}/{skip_snap.get('total_words', GRID*GRID)}",
-            "  └────────────────────────────┘",
-            "",
-            f"  Seq: {seq_display[:28]}",
-        ]
-
-        words_txt.set_fontsize(9.5)
-        words_txt.set_text("\n".join(word_lines))
-
-        # ── Handle editor open request from button (main-thread Tkinter) ──
-        if _editor_requested.is_set():
-            _open_editor_on_main_thread()  # blocks until editor window closed
-
-        # ── Fast blit path: only redraw heatmap pixels ────────
-        # Full draw (~50ms) only when text/snapshot changed (2fps).
-        # Blit path (~3ms) on all other frames — only the heatmap.
-        if _needs_full_redraw:
-            _needs_full_redraw = False
-            fig.canvas.draw()
-            _main_bg = fig.canvas.copy_from_bbox(ax_heat.bbox)
-        else:
-            fig.canvas.restore_region(_main_bg)
-            ax_heat.draw_artist(hmap)
-            fig.canvas.blit(ax_heat.bbox)
-        fig.canvas.flush_events()
-
-        # ── Flush the plot-menu figure (one window, one active plot) ──
-        # Lazy-init on first selection, then render only the active plot.
-        # draw_idle() is called here — on the MAIN thread — so TkAgg can
-        # safely schedule the idle callback.  Background threads only set
-        # axes.stale=True; we pick that up here.
-        if not _plot_inited[_active_plot_idx]:
-            _init_plot(_active_plot_idx)
+        _plot_inited[idx] = True
         try:
-            # draw_idle() removed — chart update functions already call it
-            # when their data changes.  Only flush input events here.
-            fig_menu.canvas.flush_events()
+            fig_menu.canvas.draw_idle()
         except Exception:
             pass
 
-except KeyboardInterrupt:
-    print("\nExiting.")
-    ws = word_stats.snapshot()
-    print("\n═══ FINAL WORD STATS ═══")
-    print(f"Total registered touches : {ws['total_registered']}")
-    print(f"Most touched word        : {ws['most_touched']}")
-    print(f"Hardest word             : {ws['hardest_word']}  "
-          f"(avg D={ws['hardest_word_d']:.3f})")
-    print(f"Final WPM (sliding window): {perf._wpm_counter.get_wpm()}")
-    print(f"Final WPM trend (EMA)    : {wpm_trend.get_current_ema():.1f}")
 
-    # ── Per-finger summary ─────────────────────────────────────
-    print("\n═══ PER-FINGER STATS (Butterfly) ═══")
-    for fi in range(2):
-        ft = finger_trackers[fi]
-        fi_ws = ft["word_stats"].snapshot()
-        fi_wpm = ft["perf"]._wpm_counter.get_wpm()
-        fi_trend = ft["wpm_trend"].get_current_ema()
-        fi_vt = ft["velocity"].snapshot()
-        print(f"\n── Finger {fi} ──")
-        print(f"  Touches: {fi_ws['total_registered']}")
-        print(f"  WPM: {fi_wpm:.0f}  (EMA trend: {fi_trend:.1f})")
-        print(f"  Regressions: {fi_ws['total_regressions']}")
-        print(f"  Velocity: {fi_vt['mean_vel']:.1f} cells/s  "
-              f"consistency: {fi_vt['consistency']:.2f}")
+    def _on_plot_select(label: str):
+        """RadioButtons callback — switch active plot."""
+        global _active_plot_idx
+        new_idx = PLOT_LABELS.index(label)
+        if new_idx == _active_plot_idx:
+            return  # already showing this plot
+        _active_plot_idx = new_idx
+        # Force re-init so axes are rebuilt cleanly
+        _plot_inited[_active_plot_idx] = False
 
-    # ── V-4 final WPM trend report ────────────────────────────
-    _, y_raw_final, y_ema_final, _ = wpm_trend.get_plot_data()
-    if y_ema_final:
-        print(f"\n═══ WPM TREND REPORT  [V-4] ═══")
-        print(f"Raw WPM samples          : {len(y_raw_final)}")
-        print(f"Peak raw WPM             : {max(y_raw_final):.0f}")
-        print(f"Min raw WPM              : {min(y_raw_final):.0f}")
-        print(f"Final EMA WPM            : {y_ema_final[-1]:.1f}")
-        if len(y_ema_final) > 10:
-            avg_ema = sum(y_ema_final) / len(y_ema_final)
-            print(f"Session avg EMA WPM      : {avg_ema:.1f}")
-            # Peak sustained WPM (max of EMA, which filters spikes)
-            print(f"Peak sustained WPM (EMA) : {max(y_ema_final):.1f}")
+    # Initialise the default plot (index 0) immediately.
+    # _teardown_menu_plot_axes (called inside _init_plot) recreates the
+    # RadioButtons widget and registers _on_plot_select automatically.
+    _init_plot(_active_plot_idx)
 
-    # ── M-H1 final regression report ──────────────────────────
-    print("\n═══ REGRESSION REPORT  [M-H1] ═══")
-    print(f"Total regressions        : {ws['total_regressions']}")
-    print(f"Hesitation rate          : {ws['hesitation_rate']*100:.1f}%  "
-          f"({ws['total_regressions']} regressions / "
-          f"{ws['total_registered']} touches)")
-    if ws["top_regressed"]:
-        print("\n── Top regressed words ──")
-        for word, cnt in ws["top_regressed"]:
-            flag = "  ⚠ FLAGGED" if word in ws["flagged_words"] else ""
-            print(f"  {word:<14}: {cnt} regression(s){flag}")
-    if ws["flagged_words"]:
-        print(f"\n── Flagged words (>{REGRESSION_FLAG_THRESHOLD} regressions) ──")
-        for w in ws["flagged_words"]:
-            print(f"  {w}")
-    else:
-        print("\nNo words flagged for excessive regressions.")
+    # Throttle for WPM trend plot updates (~2fps, separate from chart blit)
+    _wpm_plot_last_update    = 0.0
+    _WPM_PLOT_UPDATE_INTERVAL = 0.5
 
-    # ── M-D2 final EWIQR difficulty report ────────────────────
-    final_ewiqr = ewiqr_tracker.snapshot()
-    final_welf  = welford_per_word.snapshot()
-    print("\n═══ EWIQR DIFFICULTY REPORT  [M-D2] ═══")
-    top5_final = final_ewiqr.get("top5_hardest", [])
-    if top5_final:
-        print("\n── Top 5 hardest (by EWIQR) ──")
-        for rank, (tw, tewiqr) in enumerate(top5_final, 1):
-            tconf = final_ewiqr["confidence_per_word"].get(tw, "?")
-            tq1   = final_ewiqr["Q1_per_word"].get(tw, 0)
-            tq3   = final_ewiqr["Q3_per_word"].get(tw, 0)
-            print(f"  {rank}. {tw:<14}: EWIQR={tewiqr:.3f}s  "
-                  f"Q1={tq1:.2f}s  Q3={tq3:.2f}s  [{tconf}]")
-    else:
-        print("  (not enough data for EWIQR ranking)")
+    fig = plt.figure(figsize=(16, 10), facecolor=_BG_DARK)
+    # Leave bottom 18% of figure for threshold sliders + button
+    gs  = gridspec.GridSpec(1, 3, width_ratios=[1.1, 0.85, 0.85], wspace=0.05,
+                            bottom=0.22, top=0.96)
+    ax_heat    = fig.add_subplot(gs[0])
+    ax_metrics = fig.add_subplot(gs[1])
+    ax_words   = fig.add_subplot(gs[2])
+    for ax in (ax_heat, ax_metrics, ax_words):
+        ax.set_facecolor(_BG_CARD)
+    ax_metrics.axis("off")
+    ax_words.axis("off")
+    fig.patch.set_facecolor(_BG_DARK)
 
-    # Session average from Welford
-    if final_welf:
-        total_n = sum(v["n"] for v in final_welf.values())
-        if total_n > 0:
-            session_avg = sum(
-                v["mean"] * v["n"] for v in final_welf.values()
-            ) / total_n
-            print(f"\nSession avg duration     : {session_avg:.3f}s")
+    # ── [Edit Words] button ────────────────────────────────────────
+    ax_btn   = fig.add_axes([0.01, 0.005, 0.12, 0.035])
+    btn_edit = mwidgets.Button(ax_btn, "✎ Edit Words",
+                               color="#161b22", hovercolor="#21262d")
+    btn_edit.label.set_color(_ACCENT_BLUE)
+    btn_edit.label.set_fontsize(9)
+    btn_edit.label.set_fontfamily("sans-serif")
+    btn_edit.on_clicked(lambda _: open_word_boundary_editor())
 
-        print("\n── Per-word Welford stats ──")
-        for w_name in sorted(final_welf.keys()):
-            wf = final_welf[w_name]
-            print(f"  {w_name:<14}: n={wf['n']:>3}  "
-                  f"mean={wf['mean']:.3f}s  std={wf['std']:.3f}s")
+    # ── Threshold sliders (one per sensor row) ─────────────────────
+    # Placed below the heatmap in the bottom margin of the figure.
+    # Each slider adjusts ROW_THRESHOLDS[row] in real-time so both
+    # the detection logic (analyse_touch → threshold_mask) and the
+    # heatmap display threshold update instantly.
+    from matplotlib.widgets import Slider as _Slider
 
-    # All EWIQR values
-    all_ewiqr = final_ewiqr.get("ewiqr_per_word", {})
-    if all_ewiqr:
-        print("\n── All EWIQR values ──")
-        for w_name, ew_val in sorted(all_ewiqr.items(),
-                                     key=lambda x: x[1], reverse=True):
-            conf = final_ewiqr["confidence_per_word"].get(w_name, "?")
-            print(f"  {w_name:<14}: EWIQR={ew_val:.3f}s  [{conf}]")
+    _thresh_slider_label = fig.text(
+        0.22, 0.195, "  ROW TOUCH THRESHOLDS  (drag to adjust live)",
+        fontsize=9, fontweight="bold", color=_ACCENT_ORANGE,
+        fontfamily="sans-serif", ha="center",
+    )
 
-    # ── M-D3 final skip statistics report ─────────────────────
-    with word_boundaries_lock:
-        wb_final = {k: list(v) for k, v in word_boundaries.items()}
-    skip_final    = compute_skip_stats(wb_final, ws["word_count"])
-    skip_clusters = compute_skip_clusters(skip_final["skip_mask"])
+    _threshold_sliders: list = []
+    _slider_left   = 0.06          # left edge (figure fraction)
+    _slider_width  = 0.32          # slider width
+    _slider_height = 0.018         # per-slider height
+    _slider_gap    = 0.004         # vertical gap between sliders
+    _slider_base   = 0.015         # bottom of lowest slider
 
-    print("\n═══ SKIP STATISTICS REPORT  [M-D3] ═══")
-    print(f"Skip rate                : {skip_final['skip_rate']:.1f}%")
-    print(f"Skipped words            : {len(skip_final['skipped_words'])} / {skip_final.get('total_words', GRID*GRID)}")
-    print(f"Partially visited rows   : {skip_final['partially_visited_rows'] or 'none'}")
-
-    if skip_final["skipped_words"]:
-        print("\n── Skipped words (row-major order) ──")
-        for i, sw in enumerate(skip_final["skipped_words"]):
-            print(f"  {i+1:>2}. {sw}")
-
-    if skip_clusters:
-        sig_clusters = [c for c in skip_clusters if not c["is_noise"]]
-        noise_clusters = [c for c in skip_clusters if c["is_noise"]]
-        print(f"\n── Skip clusters: {len(skip_clusters)} total "
-              f"({len(sig_clusters)} significant, "
-              f"{len(noise_clusters)} noise) ──")
-        for i, cl in enumerate(skip_clusters):
-            bbox = cl["bounding_box"]
-            noise_tag = " [noise]" if cl["is_noise"] else ""
-            print(f"  Cluster {i+1}: size={cl['size']}  "
-                  f"bbox=({bbox[0]},{bbox[1]})-({bbox[2]},{bbox[3]})  "
-                  f"pattern={cl['pattern']}{noise_tag}")
-    else:
-        print("\n  No skip clusters (full grid coverage).")
-
-    # ── V-5 final regression chart summary ────────────────────
-    with word_stats._lock:
-        final_reg_count = dict(word_stats._regression_count)
-    visible_reg = {w: c for w, c in final_reg_count.items() if c > 0}
-    if visible_reg:
-        print("\n═══ REGRESSION BAR CHART DATA  [V-5] ═══")
-        sorted_reg = sorted(visible_reg.items(),
-                            key=lambda x: x[1], reverse=True)
-        for rank, (w, c) in enumerate(sorted_reg, 1):
-            flag = "  ⚠ FLAGGED" if c > REGRESSION_FLAG_THRESHOLD else ""
-            print(f"  {rank:>2}. {w:<14}: {c} regression(s){flag}")
-        print(f"\n  Total words with regressions: {len(visible_reg)}")
-        print(f"  Flagged words (>{REGRESSION_FLAG_THRESHOLD}): "
-              f"{len(ws['flagged_words'])}")
-
-    # ── V-7 final velocity profile report ─────────────────────
-    print("\n═══ VELOCITY PROFILE REPORT  [V-7] ═══")
-    with vel_profile._lock:
-        _vp_history = list(vel_profile._velocity_history)
-    print(f"Events stored            : {len(_vp_history)}")
-    if _vp_history:
-        _all_vp = []
-        for _va in _vp_history:
-            if len(_va) >= 2:
-                _all_vp.extend(_va.tolist())
-        if _all_vp:
-            print(f"Max velocity             : {max(_all_vp):.2f} cells/s")
-            print(f"Min velocity             : {min(_all_vp):.2f} cells/s")
-            print(f"Mean velocity (all)      : {sum(_all_vp)/len(_all_vp):.2f} cells/s")
-        _mean_vel, _weights = VelocityProfileMonitor._compute_weighted_mean_velocity(
-            _vp_history, VEL_PROFILE_ALPHA_WEIGHT
+    for _i_sl in range(GRID):
+        _y_sl = _slider_base + (GRID - 1 - _i_sl) * (_slider_height + _slider_gap)
+        _ax_sl = fig.add_axes(
+            [_slider_left, _y_sl, _slider_width, _slider_height],
+            facecolor="#1a1a2e",
         )
-        if _mean_vel is not None:
-            print(f"Weighted mean peak       : {float(_mean_vel.max()):.2f} cells/s")
-            print(f"Weighted mean length     : {len(_mean_vel)} steps")
-    else:
-        print("  (no velocity data recorded)")
+        _init_val = float(ROW_THRESHOLDS[_i_sl])
+        _sl = _Slider(
+            _ax_sl,
+            f"R{_i_sl}",
+            valmin=0.0,
+            valmax=50.0,
+            valinit=_init_val,
+            valstep=0.5,
+            color="#e94560",
+            initcolor="none",
+        )
+        _sl.label.set_color("#a0c4ff")
+        _sl.label.set_fontsize(8)
+        _sl.label.set_fontfamily("monospace")
+        _sl.valtext.set_color(_FG_PRIMARY)
+        _sl.valtext.set_fontsize(8)
 
-    # ── V-8 final efficiency plot report ──────────────────────
-    print("\n═══ PATH EFFICIENCY REPORT  [V-8] ═══")
-    with eff_plot._lock:
-        _eff_hist = list(eff_plot.efficiency_history)
-    print(f"Events recorded          : {len(_eff_hist)}")
-    if _eff_hist:
-        _eff_arr = np.array(_eff_hist)
-        print(f"Mean efficiency          : {_eff_arr.mean():.3f}")
-        print(f"Median efficiency        : {np.median(_eff_arr):.3f}")
-        print(f"Std efficiency           : {_eff_arr.std():.3f}")
-        print(f"Min efficiency           : {_eff_arr.min():.3f}")
-        print(f"Max efficiency           : {_eff_arr.max():.3f}")
-        _proficient = np.sum(_eff_arr >= 0.8)
-        _developing = np.sum((_eff_arr >= 0.5) & (_eff_arr < 0.8))
-        _struggling = np.sum(_eff_arr < 0.5)
-        print(f"Proficient (η≥0.8)      : {_proficient} ({_proficient/len(_eff_hist)*100:.0f}%)")
-        print(f"Developing (0.5≤η<0.8)  : {_developing} ({_developing/len(_eff_hist)*100:.0f}%)")
-        print(f"Struggling (η<0.5)      : {_struggling} ({_struggling/len(_eff_hist)*100:.0f}%)")
-    else:
-        print("  (no efficiency data recorded)")
+        # Closure: capture _i_sl by default arg
+        def _on_thresh_change(val, row=_i_sl):
+            ROW_THRESHOLDS[row] = val
+        _sl.on_changed(_on_thresh_change)
+        _threshold_sliders.append(_sl)
 
-    print("\n── Skip mask ──")
+    # ── Heatmap ────────────────────────────────────────────────────
+    Z    = np.zeros((GRID, GRID))
+    hmap = ax_heat.imshow(Z, cmap=_cmap, vmin=0, vmax=150,
+                          interpolation="nearest", aspect="equal")
+
+    ax_heat.set_title(
+        "Touch Pressure Map  (raw sensor layout)\n"
+        "Cell labels show word at logical (TX-shifted) position",
+        color="white", fontsize=11, fontweight="bold", pad=10)
+    ax_heat.set_xlabel("Column →   C0 … C6   (RX)", color=_FG_MUTED, fontsize=9)
+    ax_heat.set_ylabel("Row ↓   R0 … R6   (TX mux)", color=_FG_MUTED, fontsize=9)
+    ax_heat.tick_params(colors="#777777")
+    for sp in ax_heat.spines.values():
+        sp.set_edgecolor(_GRID_COLOR)
+
+    ax_heat.set_xticks(np.arange(-0.5, GRID, 1), minor=True)
+    ax_heat.set_yticks(np.arange(-0.5, GRID, 1), minor=True)
+    ax_heat.grid(which="minor", color=_GRID_COLOR, linewidth=0.8)
+    ax_heat.tick_params(which="minor", length=0)
+
+    ax_heat.set_xticks(range(GRID))
+    ax_heat.set_xticklabels([f"C{i}" for i in range(GRID)],
+                            color=_FG_MUTED, fontsize=8)
+    ax_heat.set_yticks(range(GRID))
+    ax_heat.set_yticklabels([f"R{i}" for i in range(GRID)],
+                            color=_FG_MUTED, fontsize=8)
+
+    # ── Cell label text objects ────────────────────────────────────
+    _cell_texts: dict = {}
     for r in range(GRID):
-        row_str = "  "
-        for c in range(GRID):
-            row_str += "█ " if skip_final["skip_mask"][r, c] else "· "
-        print(row_str)
+        for raw_c in range(GRID):
+            logical_c = (raw_c + TX_SHIFT) % GRID
+            coord_str = f"{r},{logical_c}"
+            with _cell_word_cache_lock:
+                word_str = _cell_word_cache.get((r, raw_c), "")
+            label = f"{coord_str}\n{word_str}" if word_str else coord_str
+            txt = ax_heat.text(raw_c, r, label,
+                               ha="center", va="center",
+                               fontsize=5.5, color="#5a8a5a",
+                               multialignment="center")
+            _cell_texts[(r, raw_c)] = txt
 
-    print("\n── Word counts ──")
-    for word, count in sorted(ws["word_count"].items(),
-                               key=lambda x: x[1], reverse=True):
-        print(f"  {word:<14}: {count}")
-    print("\n── Touch sequence (last 20) ──")
-    print("  " + " → ".join(ws["touch_sequence"]))
-finally:
-    # Graceful shutdown: suppress Tkinter destroy errors on Ctrl+C
+    # ── Metrics text ───────────────────────────────────────────────
+    metrics_txt = ax_metrics.text(
+        0.05, 0.97, "Loading…",
+        transform=ax_metrics.transAxes,
+        fontsize=10.5, va="top", ha="left",
+        family="sans-serif", color=_FG_PRIMARY, linespacing=1.85,
+    )
+
+    # ── Word-stats text ────────────────────────────────────────────
+    words_txt = ax_words.text(
+        0.05, 0.97, "Loading…",
+        transform=ax_words.transAxes,
+        fontsize=10.0, va="top", ha="left",
+        family="sans-serif", color=_FG_PRIMARY, linespacing=1.75,
+    )
+
+    disp_Z  = np.zeros((GRID, GRID))
+    last_ui = time.time()
+    ui_dt   = 1.0 / UI_FPS
+
+    # ── Blit infrastructure for fast heatmap rendering ─────────────
+    # Instead of calling fig.canvas.draw_idle() every frame (which triggers
+    # a full ~500ms canvas redraw), we use blitting:
+    #   Fast path (~3ms):  restore background → draw heatmap artist → blit region
+    #   Slow path (~50ms): full draw() at 2fps when text/snapshot data changes
+    fig.canvas.draw()
+    _main_bg = fig.canvas.copy_from_bbox(ax_heat.bbox)
+    _needs_full_redraw = False
+
+    def _on_main_resize(event=None):
+        global _main_bg
+        fig.canvas.draw()
+        _main_bg = fig.canvas.copy_from_bbox(ax_heat.bbox)
+
+    fig.canvas.mpl_connect('resize_event', _on_main_resize)
+
+    # ── Fix 3: Stop flag — set when either window is closed ───────
+    _ui_stop = threading.Event()
+
+    def _on_fig_close(event):
+        """Close either window → signal the UI loop to exit."""
+        _ui_stop.set()
+
+    fig.canvas.mpl_connect("close_event", _on_fig_close)
+    fig_menu.canvas.mpl_connect("close_event", _on_fig_close)
+
+    # ─────────────────────── UI loop ──────────────────────────────
     try:
-        plt.close('all')
-    except Exception:
-        pass
-    try:
-        ser.close()
-    except Exception:
-        pass
+        while not _ui_stop.is_set():
+            now = time.time()
+            if now - last_ui < ui_dt:
+                time.sleep(max(0.0, ui_dt - (now - last_ui)))
+                continue
+            last_ui = now
+
+            # ── B4: Only copy frame if reader delivered a new one ──
+            with latest_frame_lk:
+                _cur_gen = _frame_gen
+                frame = latest_frame.copy()
+
+            # ── C2: Vectorised numpy ops — no Python loops ────────
+            np.subtract(frame, baseline, out=_raw_delta_buf)
+            np.clip(_raw_delta_buf, 0.0, None, out=_raw_delta_buf)
+            np.multiply(_raw_delta_buf,
+                         _raw_delta_buf >= ROW_THRESHOLDS[:, np.newaxis],
+                         out=_thresh_buf)
+
+            hmap.set_data(_thresh_buf)
+            pk = float(_thresh_buf.max())
+            hmap.set_clim(0, max(30.0, pk * 1.15))
+
+            # ── A3: Refresh cell labels ONLY when boundaries change ─
+            if _cell_labels_dirty:
+                _cell_labels_dirty = False
+                _needs_full_redraw = True
+                with _cell_word_cache_lock:
+                    cache_snap = dict(_cell_word_cache)
+                for r in range(GRID):
+                    for raw_c in range(GRID):
+                        logical_c = (raw_c + TX_SHIFT) % GRID
+                        coord_str = f"{r},{logical_c}"
+                        word_str  = cache_snap.get((r, raw_c), "")
+                        label = f"{coord_str}\n{word_str}" if word_str else coord_str
+                        _cell_texts[(r, raw_c)].set_text(label)
+
+            # ── B1: Throttled snapshot cache — heavy ops at 2fps ────
+            _snap_now = time.time()
+            if _cached_ws is None or (_snap_now - _last_snapshot_time) >= _SNAPSHOT_INTERVAL:
+                _last_snapshot_time = _snap_now
+                _cached_diff_snap   = cell_diff.snapshot()
+                _cached_ws          = word_stats.snapshot()
+                _cached_ewiqr_snap  = ewiqr_tracker.snapshot()
+                _cached_welford_snap = welford_per_word.snapshot()
+                _cached_vt          = velocity_tracker.snapshot()
+                with word_boundaries_lock:
+                    _cached_wb_snap = {k: list(v) for k, v in word_boundaries.items()}
+                _cached_skip_snap = compute_skip_stats(_cached_wb_snap, _cached_ws["word_count"])
+                _needs_full_redraw = True   # snapshot data changed → schedule full redraw for text panels
+
+            # ── A4: Chart updates — only update the ACTIVE plot ─────────────
+            # Skipping all chart work for hidden plots eliminates the biggest
+            # source of frame-drop latency in the original design.
+            _chart_now = time.time()
+
+            if (_active_plot_idx == 0 and bar_chart._setup_done
+                    and _cached_welford_snap is not None
+                    and _cached_ws is not None):
+                # ── Per-Word Bar Chart (only when selected) ────────────
+                if (_chart_now - bar_chart.last_chart_time) >= BAR_CHART_UPDATE_INTERVAL:
+                    _tot_per_word = {}
+                    _std_per_word = {}
+                    for _w, _wf in _cached_welford_snap.items():
+                        _tot_per_word[_w] = _wf["mean"]
+                        _std_per_word[_w] = _wf["std"]
+                    _mean_D_per_word = {}
+                    _wc = _cached_ws["word_count"]
+                    _ewiqr_pw = _cached_ewiqr_snap.get("ewiqr_per_word", {})
+                    for _w in _wc:
+                        _mean_D_per_word[_w] = _ewiqr_pw.get(_w, 0.0)
+                    _session_avg = 0.0
+                    if _cached_welford_snap:
+                        _total_n = sum(v["n"] for v in _cached_welford_snap.values())
+                        if _total_n > 0:
+                            _session_avg = sum(
+                                v["mean"] * v["n"]
+                                for v in _cached_welford_snap.values()) / _total_n
+                    bar_chart.update(
+                        tot_per_word=_tot_per_word,
+                        std_per_word=_std_per_word,
+                        word_count=_wc,
+                        mean_D_per_word=_mean_D_per_word,
+                        session_avg_duration=_session_avg,
+                    )
+
+            elif _active_plot_idx == 2 and reg_chart._setup_done:
+                # ── Regression Bar Chart (only when selected) ──────────
+                if (_chart_now - reg_chart._last_draw_time) >= REGRESSION_CHART_UPDATE_INTERVAL:
+                    with word_stats._lock:
+                        _full_reg_count = dict(word_stats._regression_count)
+                    reg_chart.update(_full_reg_count, _cached_ws["flagged_words"])
+
+            elif _active_plot_idx == 3 and monitor_3d._setup_done:
+                # ── 2D Annotated Heatmap (replaces old 3D surface) ──────
+                if (_chart_now - monitor_3d.last_update) >= SURFACE_3D_UPDATE_INTERVAL:
+                    monitor_3d.last_update = _chart_now
+                    _wb_hm    = _cached_wb_snap
+                    _Z_tot_hm = np.zeros((GRID, GRID))
+                    for _r_hm in range(GRID):
+                        for _e_hm in _wb_hm.get(_r_hm, []):
+                            _w_hm  = _e_hm["word"]
+                            _wf_hm = _cached_welford_snap.get(_w_hm)
+                            if _wf_hm:
+                                for _c_hm in range(_e_hm["start"], _e_hm["end"] + 1):
+                                    if 0 <= _c_hm < GRID:
+                                        _Z_tot_hm[_r_hm, _c_hm] = _wf_hm["mean"]
+                    _Z_diff_hm = np.zeros((GRID, GRID))
+                    _ewiqr_hm  = _cached_ewiqr_snap.get("ewiqr_per_word", {})
+                    for _r_hm in range(GRID):
+                        for _e_hm in _wb_hm.get(_r_hm, []):
+                            _w_hm = _e_hm["word"]
+                            if _w_hm in _ewiqr_hm:
+                                for _c_hm in range(_e_hm["start"], _e_hm["end"] + 1):
+                                    if 0 <= _c_hm < GRID:
+                                        _Z_diff_hm[_r_hm, _c_hm] = _ewiqr_hm[_w_hm]
+                    monitor_3d.Z_tot  = _Z_tot_hm
+                    monitor_3d.Z_diff = _Z_diff_hm
+                    # Pick data based on mode toggle
+                    _Z_show = _Z_tot_hm if monitor_3d.current_mode == 'tot' else _Z_diff_hm
+                    _z_max = float(_Z_show.max()) if _Z_show.max() > 0 else 1.0
+                    monitor_3d._heatmap_img.set_data(_Z_show)
+                    monitor_3d._heatmap_img.set_clim(0, _z_max)
+                    _mode_label = 'Time-on-Task (s)' if monitor_3d.current_mode == 'tot' else 'EWIQR Difficulty'
+                    monitor_3d._heatmap_cbar.set_label(_mode_label, color=_FG_PRIMARY, fontsize=9)
+                    # Update cell annotations
+                    for _r_hm in range(GRID):
+                        for _c_hm in range(GRID):
+                            _word = get_word_from_touch(_r_hm, _c_hm) or '?'
+                            _val = _Z_show[_r_hm, _c_hm]
+                            _val_str = f'{_val:.2f}' if _val > 0 else '—'
+                            # High-value cells get dark text for contrast
+                            _txt_color = _BG_DARK if _val > _z_max * 0.6 else 'white'
+                            _t = monitor_3d._heatmap_texts[(_r_hm, _c_hm)]
+                            _t.set_text(f'{_word}\n{_val_str}')
+                            _t.set_color(_txt_color)
+                    monitor_3d._heatmap_ax.set_title(
+                        f'Performance Heatmap — {_mode_label}  [V-6]',
+                        color='white', fontsize=11, fontweight='bold', pad=10)
+
+            elif _active_plot_idx == 1 and ax_wpm is not None and line_wpm_raw is not None:
+                # ── V-4: WPM Trend plot (only when that plot is selected) ──
+                _now_wpm_plot = time.time()
+                if (_now_wpm_plot - _wpm_plot_last_update) >= _WPM_PLOT_UPDATE_INTERVAL:
+                    _wpm_plot_last_update = _now_wpm_plot
+                    x_raw_wpm, y_raw_wpm, y_ema_wpm, y_max_wpm = wpm_trend.get_plot_data()
+                    if x_raw_wpm:
+                        line_wpm_raw.set_data(x_raw_wpm, y_raw_wpm)
+                        line_wpm_ema.set_data(x_raw_wpm, y_ema_wpm)
+                        ax_wpm.set_ylim(0, max(10, y_max_wpm))
+                        ax_wpm.set_xlim(x_raw_wpm[0], max(x_raw_wpm[-1], 10))
+                        fig_menu.canvas.draw_idle()
+
+            # ── Plots 4 & 5: rendered exclusively from the main thread ────────
+            # Background thread (metrics_thread) sets _pending_render=True when
+            # new data arrives.  We pick it up here, safely on the main thread.
+            # We also do a throttled periodic redraw so switching TO these plots
+            # after events have already been recorded still shows the data.
+            elif _active_plot_idx == 4 and vel_profile._setup_done:
+                _vel_needs_render = vel_profile._pending_render
+                # Also re-render periodically (every 0.5s) to catch data already in the buffer
+                if not _vel_needs_render:
+                    _vel_needs_render = (time.time() - vel_profile._last_update) >= VEL_PROFILE_UPDATE_INTERVAL
+                    with vel_profile._lock:
+                        _vel_needs_render = _vel_needs_render and len(vel_profile._velocity_history) > 0
+                if _vel_needs_render:
+                    vel_profile._pending_render = False
+                    vel_profile._update_velocity_plot(time.time())
+
+            elif _active_plot_idx == 5 and eff_plot._setup_done:
+                _eff_needs_render = eff_plot._pending_render
+                # Also re-render periodically (every 0.5s) to catch data already in the buffer
+                if not _eff_needs_render:
+                    _eff_needs_render = (time.time() - eff_plot._last_update) >= EFFICIENCY_PLOT_UPDATE_INTERVAL
+                    with eff_plot._lock:
+                        _eff_needs_render = _eff_needs_render and len(eff_plot.efficiency_history) >= 2
+                if _eff_needs_render:
+                    eff_plot._pending_render = False
+                    with eff_plot._lock:
+                        _ec = len(eff_plot.event_indices)
+                    eff_plot._update_efficiency_plot(_ec, time.time())
+
+            # Use cached values for everything below
+            diff_snap    = _cached_diff_snap
+            ws           = _cached_ws
+            ewiqr_snap   = _cached_ewiqr_snap
+            welford_snap = _cached_welford_snap
+            vt           = _cached_vt
+            skip_snap    = _cached_skip_snap
+
+            # ── Hardest sensor cell ───────────────────────────────
+            if diff_snap:
+                hardest_cell = max(diff_snap, key=diff_snap.get)
+                hardest_d    = diff_snap[hardest_cell]
+                hardest_str  = f"({hardest_cell[0]},{hardest_cell[1]})  D={hardest_d:.2f}"
+            else:
+                hardest_str = "n/a"
+
+            # ── Metrics panel (simplified grouped cards) ────────────
+            m  = perf.snapshot
+            cw = m.get("current_word", "")
+            cw_str = cw if cw else "—"
+
+            # Per-finger WPM (from cached values)
+            _f0_wpm = _cached_finger_wpm[0]
+            _f1_wpm = _cached_finger_wpm[1]
+
+            # Determine finger activity from perf live state
+            _is_touching = m["is_touching"]
+            st_icon = "●" if _is_touching else "○"
+
+            # Traffic-light indicators
+            _wpm = m['wpm']
+            _wpm_dot = "🟢" if _wpm >= 50 else ("🟡" if _wpm >= 20 else "🔴")
+            _eff = eff_plot.get_avg_efficiency()
+            _eff_dot = "🟢" if _eff >= 0.8 else ("🟡" if _eff >= 0.5 else "🔴")
+            _diff = m['avg_difficulty']
+            _diff_dot = "🟢" if _diff < 1.0 else ("🟡" if _diff < 2.0 else "🔴")
+
+            lines = [
+                f"  {st_icon} {cw_str:^18s}  {m['pressed_cells']} cells",
+                "",
+                "  ── SPEED ────────────────────",
+                f"  {_wpm_dot} {_wpm:.0f} WPM  (trend {wpm_trend.get_current_ema():.0f})",
+                f"    F0: {_f0_wpm:.0f} WPM   F1: {_f1_wpm:.0f} WPM",
+                f"    {m['chars_total']} chars  {m['chars_window']} in window",
+                f"    {m['avg_duration']*1000:.0f} ms/touch",
+                "",
+                "  ── ACCURACY ─────────────────",
+                f"  {_eff_dot} Path η={_eff:.2f}",
+                f"    Backtracks: {m['total_backtracks']}",
+                f"    Regressions: {ws['total_regressions']}",
+                f"    Hesitation: {ws['hesitation_rate']*100:.0f}%",
+                "",
+                "  ── DIFFICULTY ────────────────",
+                f"  {_diff_dot} Avg D={_diff:.2f}",
+                f"    Reversals: {m['avg_reversals']:.1f}",
+                f"    Word rev: {m['word_reversals_total']}",
+                f"    Hardest: {hardest_str}",
+                "",
+                "  ── VELOCITY ─────────────────",
+                f"    Speed: {vt['mean_vel']:.1f} cells/s",
+                f"    IQR: {vt['iqr']:.2f}  ({vt['n_events']} events)",
+                f"    Consistency: {vt['consistency']:.2f}",
+            ]
+
+            # Top EWIQR hardest word (just 1 line summary)
+            top5 = ewiqr_snap.get("top5_hardest", [])
+            if top5:
+                _tw, _tiq = top5[0]
+                lines.append(f"\n  Hardest word: {_tw} (IQR={_tiq:.2f}s)")
+
+            metrics_txt.set_text("\n".join(lines))
+
+            # ── Word-stats panel (simplified) ─────────────────────
+            wc = ws["word_count"]
+            top_words = sorted(wc.items(), key=lambda x: x[1], reverse=True)[:5]
+            seq_display = " → ".join(ws["touch_sequence"][-5:]) \
+                          if ws["touch_sequence"] else "—"
+
+            flagged = ws["flagged_words"]
+            flagged_str = (", ".join(flagged[:3]) if flagged else "none")
+
+            word_lines = [
+                "  ┌─ WORDS ────────────────────┐",
+                f"  │  Touches: {ws['total_registered']}",
+                f"  │  Most: {ws['most_touched'] or '—'}",
+                f"  │  Hardest: {ws['hardest_word'] or '—'}",
+                "  └────────────────────────────┘",
+                "",
+                "  ┌─ TOP WORDS ────────────────┐",
+            ]
+            for w, n in top_words:
+                word_lines.append(f"  │  {w:<10s} {n}")
+            if not top_words:
+                word_lines.append("  │  (no touches yet)")
+            word_lines += [
+                "  └────────────────────────────┘",
+                "",
+                "  ┌─ REGRESSIONS ──────────────┐",
+                f"  │  Total: {ws['total_regressions']}",
+                f"  │  Flagged: {flagged_str}",
+                "  └────────────────────────────┘",
+                "",
+                "  ┌─ COVERAGE ────────────────┐",
+                f"  │  Skip rate: {skip_snap['skip_rate']:.0f}%",
+                f"  │  Missing: {len(skip_snap['skipped_words'])}/{skip_snap.get('total_words', GRID*GRID)}",
+                "  └────────────────────────────┘",
+                "",
+                f"  Seq: {seq_display[:28]}",
+            ]
+
+            words_txt.set_fontsize(9.5)
+            words_txt.set_text("\n".join(word_lines))
+
+            # ── Handle editor open request from button (main-thread Tkinter) ──
+            if _editor_requested.is_set():
+                _open_editor_on_main_thread()  # blocks until editor window closed
+
+            # ── Fast blit path: only redraw heatmap pixels ────────
+            # Full draw (~50ms) only when text/snapshot changed (2fps).
+            # Blit path (~3ms) on all other frames — only the heatmap.
+            if _needs_full_redraw:
+                _needs_full_redraw = False
+                fig.canvas.draw()
+                _main_bg = fig.canvas.copy_from_bbox(ax_heat.bbox)
+            else:
+                fig.canvas.restore_region(_main_bg)
+                ax_heat.draw_artist(hmap)
+                fig.canvas.blit(ax_heat.bbox)
+            fig.canvas.flush_events()
+
+            # ── Flush the plot-menu figure (one window, one active plot) ──
+            # Lazy-init on first selection, then render only the active plot.
+            # draw_idle() is called here — on the MAIN thread — so TkAgg can
+            # safely schedule the idle callback.  Background threads only set
+            # axes.stale=True; we pick that up here.
+            if not _plot_inited[_active_plot_idx]:
+                _init_plot(_active_plot_idx)
+            try:
+                # draw_idle() removed — chart update functions already call it
+                # when their data changes.  Only flush input events here.
+                fig_menu.canvas.flush_events()
+            except Exception:
+                pass
+
+    except KeyboardInterrupt:
+        print("\nExiting.")
+        ws = word_stats.snapshot()
+        print("\n═══ FINAL WORD STATS ═══")
+        print(f"Total registered touches : {ws['total_registered']}")
+        print(f"Most touched word        : {ws['most_touched']}")
+        print(f"Hardest word             : {ws['hardest_word']}  "
+              f"(avg D={ws['hardest_word_d']:.3f})")
+        print(f"Final WPM (sliding window): {perf._wpm_counter.get_wpm()}")
+        print(f"Final WPM trend (EMA)    : {wpm_trend.get_current_ema():.1f}")
+
+        # ── Per-finger summary ─────────────────────────────────────
+        print("\n═══ PER-FINGER STATS (Butterfly) ═══")
+        for fi in range(2):
+            ft = finger_trackers[fi]
+            fi_ws = ft["word_stats"].snapshot()
+            fi_wpm = ft["perf"]._wpm_counter.get_wpm()
+            fi_trend = ft["wpm_trend"].get_current_ema()
+            fi_vt = ft["velocity"].snapshot()
+            print(f"\n── Finger {fi} ──")
+            print(f"  Touches: {fi_ws['total_registered']}")
+            print(f"  WPM: {fi_wpm:.0f}  (EMA trend: {fi_trend:.1f})")
+            print(f"  Regressions: {fi_ws['total_regressions']}")
+            print(f"  Velocity: {fi_vt['mean_vel']:.1f} cells/s  "
+                  f"consistency: {fi_vt['consistency']:.2f}")
+
+        # ── V-4 final WPM trend report ────────────────────────────
+        _, y_raw_final, y_ema_final, _ = wpm_trend.get_plot_data()
+        if y_ema_final:
+            print(f"\n═══ WPM TREND REPORT  [V-4] ═══")
+            print(f"Raw WPM samples          : {len(y_raw_final)}")
+            print(f"Peak raw WPM             : {max(y_raw_final):.0f}")
+            print(f"Min raw WPM              : {min(y_raw_final):.0f}")
+            print(f"Final EMA WPM            : {y_ema_final[-1]:.1f}")
+            if len(y_ema_final) > 10:
+                avg_ema = sum(y_ema_final) / len(y_ema_final)
+                print(f"Session avg EMA WPM      : {avg_ema:.1f}")
+                # Peak sustained WPM (max of EMA, which filters spikes)
+                print(f"Peak sustained WPM (EMA) : {max(y_ema_final):.1f}")
+
+        # ── M-H1 final regression report ──────────────────────────
+        print("\n═══ REGRESSION REPORT  [M-H1] ═══")
+        print(f"Total regressions        : {ws['total_regressions']}")
+        print(f"Hesitation rate          : {ws['hesitation_rate']*100:.1f}%  "
+              f"({ws['total_regressions']} regressions / "
+              f"{ws['total_registered']} touches)")
+        if ws["top_regressed"]:
+            print("\n── Top regressed words ──")
+            for word, cnt in ws["top_regressed"]:
+                flag = "  ⚠ FLAGGED" if word in ws["flagged_words"] else ""
+                print(f"  {word:<14}: {cnt} regression(s){flag}")
+        if ws["flagged_words"]:
+            print(f"\n── Flagged words (>{REGRESSION_FLAG_THRESHOLD} regressions) ──")
+            for w in ws["flagged_words"]:
+                print(f"  {w}")
+        else:
+            print("\nNo words flagged for excessive regressions.")
+
+        # ── M-D2 final EWIQR difficulty report ────────────────────
+        final_ewiqr = ewiqr_tracker.snapshot()
+        final_welf  = welford_per_word.snapshot()
+        print("\n═══ EWIQR DIFFICULTY REPORT  [M-D2] ═══")
+        top5_final = final_ewiqr.get("top5_hardest", [])
+        if top5_final:
+            print("\n── Top 5 hardest (by EWIQR) ──")
+            for rank, (tw, tewiqr) in enumerate(top5_final, 1):
+                tconf = final_ewiqr["confidence_per_word"].get(tw, "?")
+                tq1   = final_ewiqr["Q1_per_word"].get(tw, 0)
+                tq3   = final_ewiqr["Q3_per_word"].get(tw, 0)
+                print(f"  {rank}. {tw:<14}: EWIQR={tewiqr:.3f}s  "
+                      f"Q1={tq1:.2f}s  Q3={tq3:.2f}s  [{tconf}]")
+        else:
+            print("  (not enough data for EWIQR ranking)")
+
+        # Session average from Welford
+        if final_welf:
+            total_n = sum(v["n"] for v in final_welf.values())
+            if total_n > 0:
+                session_avg = sum(
+                    v["mean"] * v["n"] for v in final_welf.values()
+                ) / total_n
+                print(f"\nSession avg duration     : {session_avg:.3f}s")
+
+            print("\n── Per-word Welford stats ──")
+            for w_name in sorted(final_welf.keys()):
+                wf = final_welf[w_name]
+                print(f"  {w_name:<14}: n={wf['n']:>3}  "
+                      f"mean={wf['mean']:.3f}s  std={wf['std']:.3f}s")
+
+        # All EWIQR values
+        all_ewiqr = final_ewiqr.get("ewiqr_per_word", {})
+        if all_ewiqr:
+            print("\n── All EWIQR values ──")
+            for w_name, ew_val in sorted(all_ewiqr.items(),
+                                         key=lambda x: x[1], reverse=True):
+                conf = final_ewiqr["confidence_per_word"].get(w_name, "?")
+                print(f"  {w_name:<14}: EWIQR={ew_val:.3f}s  [{conf}]")
+
+        # ── M-D3 final skip statistics report ─────────────────────
+        with word_boundaries_lock:
+            wb_final = {k: list(v) for k, v in word_boundaries.items()}
+        skip_final    = compute_skip_stats(wb_final, ws["word_count"])
+        skip_clusters = compute_skip_clusters(skip_final["skip_mask"])
+
+        print("\n═══ SKIP STATISTICS REPORT  [M-D3] ═══")
+        print(f"Skip rate                : {skip_final['skip_rate']:.1f}%")
+        print(f"Skipped words            : {len(skip_final['skipped_words'])} / {skip_final.get('total_words', GRID*GRID)}")
+        print(f"Partially visited rows   : {skip_final['partially_visited_rows'] or 'none'}")
+
+        if skip_final["skipped_words"]:
+            print("\n── Skipped words (row-major order) ──")
+            for i, sw in enumerate(skip_final["skipped_words"]):
+                print(f"  {i+1:>2}. {sw}")
+
+        if skip_clusters:
+            sig_clusters = [c for c in skip_clusters if not c["is_noise"]]
+            noise_clusters = [c for c in skip_clusters if c["is_noise"]]
+            print(f"\n── Skip clusters: {len(skip_clusters)} total "
+                  f"({len(sig_clusters)} significant, "
+                  f"{len(noise_clusters)} noise) ──")
+            for i, cl in enumerate(skip_clusters):
+                bbox = cl["bounding_box"]
+                noise_tag = " [noise]" if cl["is_noise"] else ""
+                print(f"  Cluster {i+1}: size={cl['size']}  "
+                      f"bbox=({bbox[0]},{bbox[1]})-({bbox[2]},{bbox[3]})  "
+                      f"pattern={cl['pattern']}{noise_tag}")
+        else:
+            print("\n  No skip clusters (full grid coverage).")
+
+        # ── V-5 final regression chart summary ────────────────────
+        with word_stats._lock:
+            final_reg_count = dict(word_stats._regression_count)
+        visible_reg = {w: c for w, c in final_reg_count.items() if c > 0}
+        if visible_reg:
+            print("\n═══ REGRESSION BAR CHART DATA  [V-5] ═══")
+            sorted_reg = sorted(visible_reg.items(),
+                                key=lambda x: x[1], reverse=True)
+            for rank, (w, c) in enumerate(sorted_reg, 1):
+                flag = "  ⚠ FLAGGED" if c > REGRESSION_FLAG_THRESHOLD else ""
+                print(f"  {rank:>2}. {w:<14}: {c} regression(s){flag}")
+            print(f"\n  Total words with regressions: {len(visible_reg)}")
+            print(f"  Flagged words (>{REGRESSION_FLAG_THRESHOLD}): "
+                  f"{len(ws['flagged_words'])}")
+
+        # ── V-7 final velocity profile report ─────────────────────
+        print("\n═══ VELOCITY PROFILE REPORT  [V-7] ═══")
+        with vel_profile._lock:
+            _vp_history = list(vel_profile._velocity_history)
+        print(f"Events stored            : {len(_vp_history)}")
+        if _vp_history:
+            _all_vp = []
+            for _va in _vp_history:
+                if len(_va) >= 2:
+                    _all_vp.extend(_va.tolist())
+            if _all_vp:
+                print(f"Max velocity             : {max(_all_vp):.2f} cells/s")
+                print(f"Min velocity             : {min(_all_vp):.2f} cells/s")
+                print(f"Mean velocity (all)      : {sum(_all_vp)/len(_all_vp):.2f} cells/s")
+            _mean_vel, _weights = VelocityProfileMonitor._compute_weighted_mean_velocity(
+                _vp_history, VEL_PROFILE_ALPHA_WEIGHT
+            )
+            if _mean_vel is not None:
+                print(f"Weighted mean peak       : {float(_mean_vel.max()):.2f} cells/s")
+                print(f"Weighted mean length     : {len(_mean_vel)} steps")
+        else:
+            print("  (no velocity data recorded)")
+
+        # ── V-8 final efficiency plot report ──────────────────────
+        print("\n═══ PATH EFFICIENCY REPORT  [V-8] ═══")
+        with eff_plot._lock:
+            _eff_hist = list(eff_plot.efficiency_history)
+        print(f"Events recorded          : {len(_eff_hist)}")
+        if _eff_hist:
+            _eff_arr = np.array(_eff_hist)
+            print(f"Mean efficiency          : {_eff_arr.mean():.3f}")
+            print(f"Median efficiency        : {np.median(_eff_arr):.3f}")
+            print(f"Std efficiency           : {_eff_arr.std():.3f}")
+            print(f"Min efficiency           : {_eff_arr.min():.3f}")
+            print(f"Max efficiency           : {_eff_arr.max():.3f}")
+            _proficient = np.sum(_eff_arr >= 0.8)
+            _developing = np.sum((_eff_arr >= 0.5) & (_eff_arr < 0.8))
+            _struggling = np.sum(_eff_arr < 0.5)
+            print(f"Proficient (η≥0.8)      : {_proficient} ({_proficient/len(_eff_hist)*100:.0f}%)")
+            print(f"Developing (0.5≤η<0.8)  : {_developing} ({_developing/len(_eff_hist)*100:.0f}%)")
+            print(f"Struggling (η<0.5)      : {_struggling} ({_struggling/len(_eff_hist)*100:.0f}%)")
+        else:
+            print("  (no efficiency data recorded)")
+
+        print("\n── Skip mask ──")
+        for r in range(GRID):
+            row_str = "  "
+            for c in range(GRID):
+                row_str += "█ " if skip_final["skip_mask"][r, c] else "· "
+            print(row_str)
+
+        print("\n── Word counts ──")
+        for word, count in sorted(ws["word_count"].items(),
+                                   key=lambda x: x[1], reverse=True):
+            print(f"  {word:<14}: {count}")
+        print("\n── Touch sequence (last 20) ──")
+        print("  " + " → ".join(ws["touch_sequence"]))
+    finally:
+        # Graceful shutdown: suppress Tkinter destroy errors on Ctrl+C
+        try:
+            plt.close('all')
+        except Exception:
+            pass
+        try:
+            ser.close()
+        except Exception:
+            pass
+
+else:
+    # ═══════════════════════════════════════════════════════════════
+    # PyQtGraph / PyQt5 REAL-TIME UI — default mode
+    # ═══════════════════════════════════════════════════════════════
+
+    # ══════════════════════════════════════════════════════════════
+    # PyQtGraph / PyQt5 REAL-TIME UI
+    # ══════════════════════════════════════════════════════════════
+    #
+    # This section replaces the entire Matplotlib visualization layer
+    # with a PyQtGraph-based dashboard for sub-50ms, 30fps rendering.
+    # All data model classes (trackers, metrics, state machines) are
+    # shared with the legacy Matplotlib path.
+    #
+    # Architecture:
+    #   BrailleMainWindow (QMainWindow)
+    #     ├─ HeatmapWidget      — 7×7 touch pressure heatmap
+    #     ├─ MetricsPanel        — live speed/accuracy/difficulty metrics
+    #     ├─ WordStatsPanel      — word counts, regressions, coverage
+    #     ├─ ThresholdSliders    — per-row ADC threshold adjustment
+    #     └─ PlotWindow (QMainWindow)
+    #          ├─ PlotSelector   — QListWidget for plot switching
+    #          └─ QStackedWidget
+    #               ├─ BarChartWidget         — per-word bar chart
+    #               ├─ WPMTrendWidget         — live WPM trend
+    #               ├─ RegressionChartWidget  — regression bars
+    #               ├─ PerfHeatmapWidget      — performance heatmap
+    #               ├─ VelocityProfileWidget  — velocity overlay
+    #               └─ EfficiencyWidget       — path efficiency scatter
+    # ══════════════════════════════════════════════════════════════
+
+
+    class WordBoundaryEditorQt(QDialog):
+        """PyQt5 port of the Tkinter WordBoundaryEditor dialog."""
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setWindowTitle("✎ Word Boundary Editor")
+            self.setMinimumSize(820, 480)
+            self.setStyleSheet("""
+                QDialog { background: #1a1a2e; }
+                QLabel { color: #e0e0e0; font-family: 'Courier New'; font-size: 10pt; }
+                QLineEdit { background: #0f3460; color: #e0e0e0; border: 1px solid #30363d;
+                            font-family: 'Courier New'; font-size: 10pt; padding: 3px; }
+                QSpinBox { background: #0f3460; color: #e0e0e0; border: 1px solid #30363d;
+                           font-family: 'Courier New'; font-size: 10pt; }
+                QPushButton { font-family: 'Courier New'; font-size: 11pt; font-weight: bold;
+                              padding: 8px 18px; border: none; border-radius: 4px; }
+                QScrollArea { border: none; }
+            """)
+            self._rows_data = []
+            self._build_ui()
+
+        def _build_ui(self):
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(16, 14, 16, 12)
+
+            # Header
+            header = QLabel("✎  WORD BOUNDARY EDITOR\n"
+                            "Edit word labels. Boundaries are spread evenly per row.")
+            header.setStyleSheet("color: #e94560; font-size: 11pt; font-weight: bold;")
+            header.setAlignment(Qt.AlignCenter)
+            layout.addWidget(header)
+
+            note = QLabel(f"Grid has {GRID} columns (0–{GRID-1}).  "
+                          "Add/remove words by changing the word count spinbox, then click Apply.")
+            note.setStyleSheet(f"color: {_FG_MUTED}; font-size: 9pt;")
+            note.setWordWrap(True)
+            layout.addWidget(note)
+
+            # Scrollable content
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll_widget = QWidget()
+            scroll_widget.setStyleSheet("background: #1a1a2e;")
+            self._grid_layout = QGridLayout(scroll_widget)
+            self._grid_layout.setSpacing(6)
+
+            # Column headers
+            self._grid_layout.addWidget(QLabel(""), 0, 0)
+            lbl_count = QLabel("# Words")
+            lbl_count.setStyleSheet("color: #a0c4ff; font-weight: bold; font-size: 9pt;")
+            self._grid_layout.addWidget(lbl_count, 0, 1)
+            lbl_words = QLabel("Word labels & block widths → (widths must sum to 7)")
+            lbl_words.setStyleSheet("color: #a0c4ff; font-weight: bold; font-size: 9pt;")
+            self._grid_layout.addWidget(lbl_words, 0, 2, 1, GRID * 3)
+
+            with word_boundaries_lock:
+                current_boundaries = {k: list(v) for k, v in word_boundaries.items()}
+
+            for row_idx in range(GRID):
+                entries = current_boundaries.get(row_idx, [])
+                words = [e["word"] for e in entries]
+                widths = [e["end"] - e["start"] + 1 for e in entries]
+
+                row_data = {"row_idx": row_idx, "words": list(words),
+                            "widths": list(widths), "widgets_frame": None}
+                self._rows_data.append(row_data)
+
+                # Row label
+                rlbl = QLabel(f" Row {row_idx}")
+                rlbl.setStyleSheet("background: #16213e; color: #e94560; font-weight: bold; padding: 4px;")
+                self._grid_layout.addWidget(rlbl, row_idx + 1, 0)
+
+                # Word count spinbox
+                sp = QSpinBox()
+                sp.setRange(1, GRID)
+                sp.setValue(len(words))
+                sp.valueChanged.connect(lambda val, ri=row_idx: self._on_count_change(ri, val))
+                row_data["count_spin"] = sp
+                self._grid_layout.addWidget(sp, row_idx + 1, 1)
+
+                # Container for word entries
+                container = QWidget()
+                container.setStyleSheet("background: #1a1a2e;")
+                container_layout = QHBoxLayout(container)
+                container_layout.setContentsMargins(0, 0, 0, 0)
+                container_layout.setSpacing(4)
+                row_data["widgets_frame"] = container
+                row_data["container_layout"] = container_layout
+                self._grid_layout.addWidget(container, row_idx + 1, 2, 1, GRID * 3)
+                self._rebuild_row_widgets(row_idx)
+
+            scroll.setWidget(scroll_widget)
+            layout.addWidget(scroll, 1)
+
+            # Buttons
+            btn_layout = QHBoxLayout()
+            btn_apply = QPushButton("✔  Apply Changes")
+            btn_apply.setStyleSheet("background: #e94560; color: white;")
+            btn_apply.setCursor(Qt.PointingHandCursor)
+            btn_apply.clicked.connect(self._apply)
+            btn_layout.addWidget(btn_apply)
+
+            btn_close = QPushButton("✖  Close")
+            btn_close.setStyleSheet("background: #333355; color: #aaaacc;")
+            btn_close.setCursor(Qt.PointingHandCursor)
+            btn_close.clicked.connect(self.reject)
+            btn_layout.addWidget(btn_close)
+            layout.addLayout(btn_layout)
+
+        def _rebuild_row_widgets(self, row_idx):
+            rd = self._rows_data[row_idx]
+            layout = rd["container_layout"]
+            # Clear existing
+            while layout.count():
+                item = layout.takeAt(0)
+                w = item.widget()
+                if w:
+                    w.deleteLater()
+
+            n = rd["count_spin"].value()
+            words = rd["words"]
+            widths = rd["widths"]
+            while len(words) < n:
+                words.append("")
+            words = words[:n]
+            while len(widths) < n:
+                widths.append(1)
+            widths = widths[:n]
+            if sum(widths) != GRID:
+                base, extra = divmod(GRID, n)
+                widths = [base + (1 if i < extra else 0) for i in range(n)]
+            rd["words"] = words
+            rd["widths"] = widths
+
+            # Compute ranges
+            col = 0
+            rd["word_edits"] = []
+            rd["width_spins"] = []
+            for i in range(n):
+                w = widths[i]
+                s, e = col, col + w - 1
+                col += w
+                rlbl = QLabel(f"[{s}-{e}]")
+                rlbl.setStyleSheet("color: #a0c4ff; font-size: 8pt;")
+                layout.addWidget(rlbl)
+                we = QLineEdit(words[i])
+                we.setMinimumWidth(70)
+                rd["word_edits"].append(we)
+                layout.addWidget(we)
+                ws = QSpinBox()
+                ws.setRange(1, GRID)
+                ws.setValue(w)
+                ws.setMaximumWidth(50)
+                ws.setStyleSheet("background: #2a2a4e; color: #ffcc66;")
+                rd["width_spins"].append(ws)
+                layout.addWidget(ws)
+            layout.addStretch()
+
+        def _on_count_change(self, row_idx, val):
+            self._rebuild_row_widgets(row_idx)
+
+        def _apply(self):
+            global word_boundaries
+            new_tgrid = []
+            for rd in self._rows_data:
+                words = [e.text().strip() for e in rd.get("word_edits", [])]
+                widths = [s.value() for s in rd.get("width_spins", [])]
+                while len(widths) < len(words):
+                    widths.append(1)
+                entries = []
+                for i, w in enumerate(words):
+                    label = w if w else f"?{i}"
+                    entries.append((label, widths[i]))
+                total_w = sum(widths[:len(words)])
+                if total_w != GRID:
+                    QMessageBox.critical(self, "Invalid widths",
+                        f"Row {rd['row_idx']}: block widths sum to {total_w}, must equal {GRID}.")
+                    return
+                new_tgrid.append(entries)
+
+            # Preserve extra rows beyond GRID
+            with word_boundaries_lock:
+                all_row_keys = sorted(word_boundaries.keys())
+            extra_keys = [k for k in all_row_keys if k >= GRID]
+            for k in extra_keys:
+                with word_boundaries_lock:
+                    extra_entries = [(e["word"], e["end"] - e["start"] + 1)
+                                     for e in word_boundaries[k]]
+                new_tgrid.append(extra_entries)
+
+            new_boundaries = _build_word_boundaries(new_tgrid, GRID)
+            with word_boundaries_lock:
+                word_boundaries.clear()
+                word_boundaries.update(new_boundaries)
+            _rebuild_cell_word_cache()
+
+            QMessageBox.information(self, "Applied",
+                "Word boundaries updated!\nThe heatmap and detection logic now use the new mapping.")
+            self.accept()
+
+
+    # ── PyQtGraph color LUT matching the matplotlib _cmap ──────────
+    def _build_touch_lut():
+        """Build a 256-entry RGBA LUT for the heatmap colormap."""
+        colors = [
+            (0.0,   QColor("#0d1117")),
+            (0.15,  QColor("#1a1040")),
+            (0.35,  QColor("#4c1d95")),
+            (0.55,  QColor("#dc2626")),
+            (0.70,  QColor("#f97316")),
+            (0.85,  QColor("#fbbf24")),
+            (1.0,   QColor("#fef3c7")),
+        ]
+        lut = np.zeros((256, 4), dtype=np.ubyte)
+        for i in range(256):
+            t = i / 255.0
+            # Find segment
+            for j in range(len(colors) - 1):
+                t0, c0 = colors[j]
+                t1, c1 = colors[j + 1]
+                if t0 <= t <= t1:
+                    f = (t - t0) / (t1 - t0) if t1 > t0 else 0
+                    r = int(c0.red()   + f * (c1.red()   - c0.red()))
+                    g = int(c0.green() + f * (c1.green() - c0.green()))
+                    b = int(c0.blue()  + f * (c1.blue()  - c0.blue()))
+                    lut[i] = [r, g, b, 255]
+                    break
+        return lut
+
+
+    class HeatmapWidget(pg.GraphicsLayoutWidget):
+        """7×7 touch pressure heatmap using pyqtgraph ImageItem."""
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setBackground("#0d1117")
+            self.setMinimumSize(420, 380)
+
+            self._plot = self.addPlot(title="Touch Pressure Map (raw sensor layout)")
+            self._plot.setLabel('bottom', "Column → C0…C6 (RX)")
+            self._plot.setLabel('left', "Row ↓ R0…R6 (TX mux)")
+            self._plot.invertY(True)
+            self._plot.setRange(xRange=[-0.5, GRID - 0.5], yRange=[-0.5, GRID - 0.5])
+            self._plot.setAspectLocked(True)
+            self._plot.hideButtons()
+
+            self._img = pg.ImageItem()
+            self._lut = _build_touch_lut()
+            self._img.setLookupTable(self._lut)
+            self._plot.addItem(self._img)
+
+            # Axes ticks
+            x_ticks = [(i, f"C{i}") for i in range(GRID)]
+            y_ticks = [(i, f"R{i}") for i in range(GRID)]
+            self._plot.getAxis('bottom').setTicks([x_ticks])
+            self._plot.getAxis('left').setTicks([y_ticks])
+
+            # Cell text labels
+            self._cell_texts = {}
+            for r in range(GRID):
+                for c in range(GRID):
+                    logical_c = (c + TX_SHIFT) % GRID
+                    word = get_word_from_touch(r, logical_c) or ""
+                    coord = f"{r},{logical_c}"
+                    label = f"{coord}\n{word}" if word else coord
+                    txt = pg.TextItem(label, color="#5a8a5a", anchor=(0.5, 0.5))
+                    txt.setFont(QFont("Courier New", 7))
+                    txt.setPos(c, r)
+                    self._plot.addItem(txt)
+                    self._cell_texts[(r, c)] = txt
+
+            # Grid lines
+            for i in range(GRID + 1):
+                pos = i - 0.5
+                self._plot.addLine(x=pos, pen=pg.mkPen("#21262d", width=1))
+                self._plot.addLine(y=pos, pen=pg.mkPen("#21262d", width=1))
+
+        def update_data(self, delta):
+            """Update heatmap with new 7x7 delta array."""
+            pk = float(delta.max())
+            # Normalize to 0-255 for LUT
+            vmax = max(30.0, pk * 1.15)
+            normalized = np.clip(delta / vmax * 255, 0, 255).astype(np.ubyte)
+            # ImageItem expects (width, height) so transpose
+            self._img.setImage(normalized.T, levels=[0, 255])
+            self._img.setRect(-0.5, -0.5, GRID, GRID)
+
+        def refresh_labels(self):
+            """Rebuild cell labels after word boundary changes."""
+            for r in range(GRID):
+                for c in range(GRID):
+                    logical_c = (c + TX_SHIFT) % GRID
+                    word = get_word_from_touch(r, logical_c) or ""
+                    coord = f"{r},{logical_c}"
+                    label = f"{coord}\n{word}" if word else coord
+                    self._cell_texts[(r, c)].setText(label)
+
+
+    class MetricsPanel(QLabel):
+        """Live metrics display with monospace text."""
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setStyleSheet(f"""
+                QLabel {{
+                    background: {_BG_CARD};
+                    color: {_FG_PRIMARY};
+                    font-family: 'Courier New', monospace;
+                    font-size: 10pt;
+                    padding: 10px;
+                    border: 1px solid {_BG_BORDER};
+                    border-radius: 4px;
+                }}
+            """)
+            self.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+            self.setWordWrap(False)
+            self.setMinimumWidth(320)
+            self.setText("  Loading…")
+
+        def update_metrics(self, m, ws, vt, ewiqr_snap, diff_snap,
+                           eff_avg, wpm_ema, finger_wpms, skip_snap):
+            cw = m.get("current_word", "")
+            cw_str = cw if cw else "—"
+            st_icon = "●" if m["is_touching"] else "○"
+            _wpm = m['wpm']
+            _wpm_dot = "🟢" if _wpm >= 50 else ("🟡" if _wpm >= 20 else "🔴")
+            _eff_dot = "🟢" if eff_avg >= 0.8 else ("🟡" if eff_avg >= 0.5 else "🔴")
+            _diff = m['avg_difficulty']
+            _diff_dot = "🟢" if _diff < 1.0 else ("🟡" if _diff < 2.0 else "🔴")
+
+            if diff_snap:
+                hc = max(diff_snap, key=diff_snap.get)
+                hd = diff_snap[hc]
+                hardest_str = f"({hc[0]},{hc[1]}) D={hd:.2f}"
+            else:
+                hardest_str = "n/a"
+
+            top5 = ewiqr_snap.get("top5_hardest", [])
+            hw_line = ""
+            if top5:
+                tw, tiq = top5[0]
+                hw_line = f"\n  Hardest word: {tw} (IQR={tiq:.2f}s)"
+
+            lines = [
+                f"  {st_icon} {cw_str:^18s}  {m['pressed_cells']} cells",
+                "",
+                "  ── SPEED ────────────────────",
+                f"  {_wpm_dot} {_wpm:.0f} WPM  (trend {wpm_ema:.0f})",
+                f"    F0: {finger_wpms[0]:.0f} WPM   F1: {finger_wpms[1]:.0f} WPM",
+                f"    {m['chars_total']} chars  {m['chars_window']} in window",
+                f"    {m['avg_duration']*1000:.0f} ms/touch",
+                "",
+                "  ── ACCURACY ─────────────────",
+                f"  {_eff_dot} Path η={eff_avg:.2f}",
+                f"    Backtracks: {m['total_backtracks']}",
+                f"    Regressions: {ws['total_regressions']}",
+                f"    Hesitation: {ws['hesitation_rate']*100:.0f}%",
+                "",
+                "  ── DIFFICULTY ────────────────",
+                f"  {_diff_dot} Avg D={_diff:.2f}",
+                f"    Reversals: {m['avg_reversals']:.1f}",
+                f"    Word rev: {m['word_reversals_total']}",
+                f"    Hardest: {hardest_str}",
+                "",
+                "  ── VELOCITY ─────────────────",
+                f"    Speed: {vt['mean_vel']:.1f} cells/s",
+                f"    IQR: {vt['iqr']:.2f}  ({vt['n_events']} events)",
+                f"    Consistency: {vt['consistency']:.2f}",
+            ]
+            if hw_line:
+                lines.append(hw_line)
+            self.setText("\n".join(lines))
+
+
+    class WordStatsPanel(QLabel):
+        """Word statistics display with monospace text."""
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setStyleSheet(f"""
+                QLabel {{
+                    background: {_BG_CARD};
+                    color: {_FG_PRIMARY};
+                    font-family: 'Courier New', monospace;
+                    font-size: 9.5pt;
+                    padding: 10px;
+                    border: 1px solid {_BG_BORDER};
+                    border-radius: 4px;
+                }}
+            """)
+            self.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+            self.setWordWrap(False)
+            self.setMinimumWidth(300)
+            self.setText("  Loading…")
+
+        def update_stats(self, ws, skip_snap):
+            wc = ws["word_count"]
+            top_words = sorted(wc.items(), key=lambda x: x[1], reverse=True)[:5]
+            seq_display = " → ".join(ws["touch_sequence"][-5:]) \
+                          if ws["touch_sequence"] else "—"
+            flagged = ws["flagged_words"]
+            flagged_str = (", ".join(flagged[:3]) if flagged else "none")
+
+            lines = [
+                "  ┌─ WORDS ────────────────────┐",
+                f"  │  Touches: {ws['total_registered']}",
+                f"  │  Most: {ws['most_touched'] or '—'}",
+                f"  │  Hardest: {ws['hardest_word'] or '—'}",
+                "  └────────────────────────────┘",
+                "",
+                "  ┌─ TOP WORDS ────────────────┐",
+            ]
+            for w, n in top_words:
+                lines.append(f"  │  {w:<10s} {n}")
+            if not top_words:
+                lines.append("  │  (no touches yet)")
+            lines += [
+                "  └────────────────────────────┘",
+                "",
+                "  ┌─ REGRESSIONS ──────────────┐",
+                f"  │  Total: {ws['total_regressions']}",
+                f"  │  Flagged: {flagged_str}",
+                "  └────────────────────────────┘",
+                "",
+                "  ┌─ COVERAGE ────────────────┐",
+                f"  │  Skip rate: {skip_snap['skip_rate']:.0f}%",
+                f"  │  Missing: {len(skip_snap['skipped_words'])}/{skip_snap.get('total_words', GRID*GRID)}",
+                "  └────────────────────────────┘",
+                "",
+                f"  Seq: {seq_display[:28]}",
+            ]
+            self.setText("\n".join(lines))
+
+
+    class BarChartWidget(pg.PlotWidget):
+        """Per-word dual bar chart using pyqtgraph."""
+
+        def __init__(self, parent=None):
+            super().__init__(parent, background="#0d1117")
+            self.setTitle("Per-Word Performance (Time-on-Task & Touch Counts)",
+                          color="w", size="11pt")
+            self.setLabel('left', "Time-on-Task (s)", color=_FG_PRIMARY)
+            self.setLabel('bottom', "Word", color=_FG_MUTED)
+            self.showGrid(y=True, alpha=0.3)
+            self._last_update = 0
+            self._bar_items_tot = None
+            self._bar_items_cnt = None
+            self._hline = None
+            self._word_list = []
+            self._inited = False
+
+        def update_chart(self, welford_snap, word_count, ewiqr_snap, wb_snap):
+            now = time.time()
+            if now - self._last_update < 0.5:
+                return
+            self._last_update = now
+
+            # Build word list in row-major order
+            word_list = []
+            word_rows = []
+            for ri in range(GRID):
+                for e in wb_snap.get(ri, []):
+                    word_list.append(e["word"])
+                    word_rows.append(ri)
+
+            if not word_list:
+                return
+
+            n = len(word_list)
+            x = np.arange(n)
+            tot_vals = np.array([welford_snap.get(w, {}).get("mean", 0.0) for w in word_list])
+            cnt_vals = np.array([word_count.get(w, 0) for w in word_list], dtype=float)
+
+            # Normalize count to same scale as tot for overlay
+            cnt_max = max(cnt_vals.max(), 1)
+            tot_max = max(tot_vals.max(), 0.1)
+            cnt_scaled = cnt_vals / cnt_max * tot_max if cnt_max > 0 else cnt_vals
+
+            tab10 = plt.cm.tab10
+            colors_tot = [pg.mkColor(*[int(c * 255) for c in tab10(wr)[:3]]) for wr in word_rows]
+            colors_cnt = [pg.mkColor(*[int(c * 255) for c in tab10(wr)[:3]], 80) for wr in word_rows]
+
+            self.clear()
+
+            # Primary bars (Time-on-Task)
+            bw = 0.35
+            bg_tot = pg.BarGraphItem(x=x - bw/2, height=tot_vals, width=bw,
+                                      brushes=colors_tot)
+            self.addItem(bg_tot)
+
+            # Count bars (semi-transparent)
+            bg_cnt = pg.BarGraphItem(x=x + bw/2, height=cnt_scaled, width=bw,
+                                      brushes=colors_cnt)
+            self.addItem(bg_cnt)
+
+            # Session average line
+            if welford_snap:
+                total_n = sum(v.get("n", 0) for v in welford_snap.values())
+                if total_n > 0:
+                    session_avg = sum(v.get("mean", 0) * v.get("n", 0)
+                                      for v in welford_snap.values()) / total_n
+                    self.addLine(y=session_avg, pen=pg.mkPen("#00ffaa", style=Qt.DashLine, width=1.5))
+
+            # X-axis labels
+            ax = self.getAxis('bottom')
+            ax.setTicks([[(i, w) for i, w in enumerate(word_list)]])
+            self._word_list = word_list
+
+
+    class WPMTrendWidget(pg.PlotWidget):
+        """Live WPM trend plot with raw + EMA lines."""
+
+        def __init__(self, parent=None):
+            super().__init__(parent, background="#0d1117")
+            self.setTitle("Live WPM Trend (Median Pre-filter → EMA)",
+                          color="w", size="11pt")
+            self.setLabel('left', "Words Per Minute", color=_FG_MUTED)
+            self.setLabel('bottom', "Session Time (s)", color=_FG_MUTED)
+            self.showGrid(y=True, alpha=0.3)
+
+            self._line_raw = self.plot([], [], pen=pg.mkPen("#334466", width=1), name="Raw WPM")
+            self._line_ema = self.plot([], [], pen=pg.mkPen("#00ffaa", width=2.5), name="EMA Trend")
+
+            # Reference lines
+            self.addLine(y=50, pen=pg.mkPen("#ffaa00", style=Qt.DashLine, width=0.9))
+            self.addLine(y=100, pen=pg.mkPen("#00aaff", style=Qt.DashLine, width=0.9))
+
+            self.addLegend(offset=(10, 10))
+            self._last_update = 0
+
+        def update_trend(self, x_raw, y_raw, y_ema, y_max):
+            now = time.time()
+            if now - self._last_update < 0.5:
+                return
+            self._last_update = now
+
+            if not x_raw:
+                return
+            self._line_raw.setData(x_raw, y_raw)
+            self._line_ema.setData(x_raw, y_ema)
+            self.setYRange(0, max(10, y_max))
+            self.setXRange(x_raw[0], max(x_raw[-1], 10))
+
+
+    class RegressionChartWidget(pg.PlotWidget):
+        """Horizontal bar chart for inter-word regressions."""
+
+        def __init__(self, parent=None):
+            super().__init__(parent, background="#0d1117")
+            self.setTitle("Most-Regressed Words (inter-word regressions)",
+                          color="w", size="11pt")
+            self.setLabel('bottom', "Regression count", color=_FG_MUTED)
+            self.showGrid(x=True, alpha=0.3)
+            self._last_update = 0
+            self._empty_text = pg.TextItem("No regressions recorded yet",
+                                            color="#666666", anchor=(0.5, 0.5))
+            self._empty_text.setFont(QFont("sans-serif", 12))
+            self.addItem(self._empty_text)
+            self._empty_text.setPos(5, 0)
+
+        def update_regressions(self, regression_count, flagged_words):
+            now = time.time()
+            if now - self._last_update < 0.5:
+                return
+            self._last_update = now
+
+            visible = {w: c for w, c in regression_count.items() if c > 0}
+            sorted_items = sorted(visible.items(), key=lambda x: x[1], reverse=True)
+
+            self.clear()
+
+            if not sorted_items:
+                self._empty_text = pg.TextItem("No regressions recorded yet",
+                                                color="#666666", anchor=(0.5, 0.5))
+                self._empty_text.setFont(QFont("sans-serif", 12))
+                self.addItem(self._empty_text)
+                self._empty_text.setPos(5, 0)
+                return
+
+            words = [item[0] for item in sorted_items]
+            counts = [item[1] for item in sorted_items]
+            flagged_set = set(flagged_words)
+            n = len(words)
+            y_pos = np.arange(n)
+
+            colors = [pg.mkColor("#ff4444") if w in flagged_set else pg.mkColor("#4488ff")
+                      for w in words]
+
+            bg = pg.BarGraphItem(x0=0, y=y_pos, height=0.6,
+                                  width=counts, brushes=colors)
+            self.addItem(bg)
+
+            ax = self.getAxis('left')
+            ax.setTicks([[(i, w) for i, w in enumerate(words)]])
+            self.invertY(True)
+            self.setXRange(0, max(1, max(counts) * 1.15))
+
+            # Add count labels
+            for i, c in enumerate(counts):
+                txt = pg.TextItem(str(c), color="w", anchor=(0, 0.5))
+                txt.setFont(QFont("Courier New", 9, QFont.Bold))
+                txt.setPos(c + 0.2, i)
+                self.addItem(txt)
+
+
+    class PerfHeatmapWidget(pg.GraphicsLayoutWidget):
+        """Performance heatmap (Time-on-Task or EWIQR Difficulty)."""
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setBackground("#0d1117")
+            self._mode = 'tot'
+            self._last_update = 0
+
+            self._plot = self.addPlot(title="Performance Heatmap [V-6]")
+            self._plot.invertY(True)
+            self._plot.setRange(xRange=[-0.5, GRID - 0.5], yRange=[-0.5, GRID - 0.5])
+            self._plot.setAspectLocked(True)
+
+            self._img = pg.ImageItem()
+            # YlOrRd-like LUT
+            ylrd_lut = self._build_ylrd_lut()
+            self._img.setLookupTable(ylrd_lut)
+            self._plot.addItem(self._img)
+
+            # Cell text annotations
+            self._texts = {}
+            for r in range(GRID):
+                for c in range(GRID):
+                    word = get_word_from_touch(r, c) or "?"
+                    txt = pg.TextItem(f"{word}\n—", color="w", anchor=(0.5, 0.5))
+                    txt.setFont(QFont("Courier New", 7, QFont.Bold))
+                    txt.setPos(c, r)
+                    self._plot.addItem(txt)
+                    self._texts[(r, c)] = txt
+
+            # Grid lines
+            for i in range(GRID + 1):
+                pos = i - 0.5
+                self._plot.addLine(x=pos, pen=pg.mkPen("#21262d", width=1))
+                self._plot.addLine(y=pos, pen=pg.mkPen("#21262d", width=1))
+
+            # Axes ticks
+            x_ticks = [(i, f"C{i}") for i in range(GRID)]
+            y_ticks = [(i, f"R{i}") for i in range(GRID)]
+            self._plot.getAxis('bottom').setTicks([x_ticks])
+            self._plot.getAxis('left').setTicks([y_ticks])
+
+        @staticmethod
+        def _build_ylrd_lut():
+            colors = [(0, 0, 0), (255, 255, 204), (254, 217, 118),
+                      (254, 178, 76), (253, 141, 60), (240, 59, 32), (189, 0, 38)]
+            lut = np.zeros((256, 4), dtype=np.ubyte)
+            n = len(colors) - 1
+            for i in range(256):
+                t = i / 255.0 * n
+                idx = int(t)
+                f = t - idx
+                if idx >= n:
+                    idx, f = n - 1, 1.0
+                c0, c1 = colors[idx], colors[idx + 1]
+                lut[i] = [int(c0[j] + f * (c1[j] - c0[j])) for j in range(3)] + [255]
+            return lut
+
+        def set_mode(self, mode):
+            self._mode = mode
+            self._last_update = 0
+
+        def update_perf(self, Z_tot, Z_diff, wb_snap):
+            now = time.time()
+            if now - self._last_update < 0.5:
+                return
+            self._last_update = now
+
+            Z = Z_tot if self._mode == 'tot' else Z_diff
+            z_max = float(Z.max()) if Z.max() > 0 else 1.0
+            normalized = np.clip(Z / z_max * 255, 0, 255).astype(np.ubyte)
+            self._img.setImage(normalized.T, levels=[0, 255])
+            self._img.setRect(-0.5, -0.5, GRID, GRID)
+
+            mode_label = "Time-on-Task" if self._mode == 'tot' else "EWIQR Difficulty"
+            self._plot.setTitle(f"Performance Heatmap — {mode_label} [V-6]")
+
+            for r in range(GRID):
+                for c in range(GRID):
+                    word = get_word_from_touch(r, c) or "?"
+                    val = Z[r, c]
+                    val_str = f"{val:.2f}" if val > 0 else "—"
+                    self._texts[(r, c)].setText(f"{word}\n{val_str}")
+
+
+    class VelocityProfileWidget(pg.PlotWidget):
+        """Last-N velocity profile overlay."""
+
+        def __init__(self, parent=None):
+            super().__init__(parent, background="#0d1117")
+            self.setTitle("Velocity Profile — last 20 touches [V-7]",
+                          color="w", size="11pt")
+            self.setLabel('left', "Velocity (cells/sec)", color=_FG_MUTED)
+            self.setLabel('bottom', "Step index", color=_FG_MUTED)
+            self.showGrid(y=True, alpha=0.3)
+            self.addLine(y=0, pen=pg.mkPen("w", width=0.5, style=Qt.SolidLine))
+            self._lines_past = []
+            self._line_recent = self.plot([], [], pen=pg.mkPen("#1f77b4", width=2.5),
+                                           name="Most recent")
+            self._line_mean = self.plot([], [], pen=pg.mkPen("#ff7f0e", width=2,
+                                             style=Qt.DashLine), name="Weighted mean")
+            self.addLegend(offset=(10, 10))
+            self._last_update = 0
+
+        def update_velocities(self, vel_history_snapshot, alpha_weight=0.15):
+            now = time.time()
+            if now - self._last_update < 0.2:
+                return
+            self._last_update = now
+
+            vels = vel_history_snapshot
+            if not vels:
+                return
+
+            # Remove old past lines
+            for line in self._lines_past:
+                self.removeItem(line)
+            self._lines_past = []
+
+            N = len(vels)
+
+            # Past events (gray)
+            for i in range(N - 1):
+                v = vels[i]
+                if len(v) >= 2:
+                    x = np.arange(len(v))
+                    line = self.plot(x, v, pen=pg.mkPen("#888888", width=0.8))
+                    line.setOpacity(0.15)
+                    self._lines_past.append(line)
+
+            # Most recent (bold blue)
+            v_recent = vels[-1]
+            if len(v_recent) >= 2:
+                self._line_recent.setData(np.arange(len(v_recent)), v_recent)
+            else:
+                self._line_recent.setData([], [])
+
+            # Weighted mean
+            mean_vel, _ = VelocityProfileMonitor._compute_weighted_mean_velocity(
+                vels, alpha_weight)
+            if mean_vel is not None:
+                self._line_mean.setData(np.arange(len(mean_vel)), mean_vel)
+            else:
+                self._line_mean.setData([], [])
+
+            # Auto-scale
+            all_vals = []
+            for va in vels:
+                if len(va) >= 2:
+                    all_vals.extend(va.tolist())
+            if all_vals:
+                self.setYRange(-0.1, max(0.5, max(all_vals) * 1.1))
+            max_step = max(len(v) for v in vels)
+            self.setXRange(-1, max(2, max_step))
+
+
+    class EfficiencyWidget(pg.PlotWidget):
+        """Path efficiency scatter + trend plot."""
+
+        def __init__(self, parent=None):
+            super().__init__(parent, background="#0d1117")
+            self.setTitle("Path Efficiency Over Session [V-8]",
+                          color="w", size="11pt")
+            self.setLabel('left', "Path efficiency (η)", color=_FG_MUTED)
+            self.setLabel('bottom', "Contact # (press→release)", color=_FG_MUTED)
+            self.showGrid(y=True, alpha=0.3)
+            self.setYRange(0, 1.05)
+            self.setXRange(0, 10)
+
+            # Reference line at η=0.8
+            self.addLine(y=0.8, pen=pg.mkPen("#2ca02c", width=1.5, style=Qt.DashLine))
+
+            # Tier bands
+            from pyqtgraph import LinearRegionItem
+            band_g = LinearRegionItem([0.8, 1.05], orientation='horizontal',
+                                       brush=pg.mkBrush(44, 160, 44, 15), movable=False)
+            band_o = LinearRegionItem([0.5, 0.8], orientation='horizontal',
+                                       brush=pg.mkBrush(255, 127, 14, 15), movable=False)
+            band_r = LinearRegionItem([0.0, 0.5], orientation='horizontal',
+                                       brush=pg.mkBrush(214, 39, 40, 15), movable=False)
+            for b in (band_g, band_o, band_r):
+                b.setZValue(-10)
+                self.addItem(b)
+
+            self._scatter = pg.ScatterPlotItem(size=8, pen=pg.mkPen("w", width=0.3))
+            self.addItem(self._scatter)
+            self._conn_line = self.plot([], [], pen=pg.mkPen("#66aaff", width=1.2))
+            self._conn_line.setOpacity(0.5)
+            self._trend_line = self.plot([], [], pen=pg.mkPen("#ff7f0e", width=3))
+            self.addLegend(offset=(10, 10))
+            self._last_update = 0
+
+        def update_efficiency(self, eff_hist, evt_idx, cached_trend_x, cached_trend_y):
+            now = time.time()
+            if now - self._last_update < 0.5:
+                return
+            self._last_update = now
+
+            if len(eff_hist) < 2:
+                return
+
+            # Color-code points
+            colors = []
+            for eta in eff_hist:
+                if eta >= 0.8:
+                    colors.append(pg.mkBrush("#2ca02c"))
+                elif eta >= 0.5:
+                    colors.append(pg.mkBrush("#ff7f0e"))
+                else:
+                    colors.append(pg.mkBrush("#d62728"))
+
+            spots = [{'pos': (x, y), 'brush': b}
+                     for x, y, b in zip(evt_idx, eff_hist, colors)]
+            self._scatter.setData(spots)
+            self._conn_line.setData(evt_idx, eff_hist)
+
+            if cached_trend_y is not None and len(cached_trend_y) > 0:
+                self._trend_line.setData(cached_trend_x, cached_trend_y)
+
+            if evt_idx:
+                self.setXRange(0, max(evt_idx) + 5)
+
+
+    class PlotPanel(QWidget):
+        """Switchable plot panel with list selector and stacked plots."""
+
+        PLOT_LABELS = [
+            "Per-Word Bars",
+            "WPM Trend",
+            "Regression Chart",
+            "Perf. Heatmap",
+            "Velocity Profile",
+            "Path Efficiency",
+        ]
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setStyleSheet(f"background: {_BG_DARK};")
+            layout = QHBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+
+            # Plot selector list
+            self._list = QListWidget()
+            self._list.setMaximumWidth(140)
+            self._list.setStyleSheet(f"""
+                QListWidget {{
+                    background: {_BG_CARD};
+                    color: #c9d1d9;
+                    font-family: monospace;
+                    font-size: 9pt;
+                    border: 1px solid {_BG_BORDER};
+                    outline: none;
+                }}
+                QListWidget::item {{
+                    padding: 8px 6px;
+                    border-bottom: 1px solid {_BG_BORDER};
+                }}
+                QListWidget::item:selected {{
+                    background: #21262d;
+                    color: {_ACCENT_BLUE};
+                }}
+            """)
+            for label in self.PLOT_LABELS:
+                self._list.addItem(QListWidgetItem(label))
+            self._list.setCurrentRow(0)
+            self._list.currentRowChanged.connect(self._on_select)
+            layout.addWidget(self._list)
+
+            # Stacked widget for plots
+            self._stack = QStackedWidget()
+            self._stack.setStyleSheet(f"background: {_BG_DARK};")
+
+            self.bar_chart = BarChartWidget()
+            self.wpm_trend = WPMTrendWidget()
+            self.regression = RegressionChartWidget()
+            self.perf_heatmap = PerfHeatmapWidget()
+            self.velocity = VelocityProfileWidget()
+            self.efficiency = EfficiencyWidget()
+
+            # Mode toggle for perf heatmap
+            perf_container = QWidget()
+            perf_layout = QVBoxLayout(perf_container)
+            perf_layout.setContentsMargins(0, 0, 0, 0)
+            mode_bar = QHBoxLayout()
+            self._btn_tot = QPushButton("Time-on-Task")
+            self._btn_diff = QPushButton("EWIQR Difficulty")
+            for btn in (self._btn_tot, self._btn_diff):
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background: {_BG_CARD}; color: {_FG_PRIMARY};
+                        font-size: 9pt; padding: 4px 12px;
+                        border: 1px solid {_BG_BORDER}; border-radius: 3px;
+                    }}
+                    QPushButton:hover {{ background: #21262d; }}
+                """)
+                btn.setCursor(Qt.PointingHandCursor)
+            self._btn_tot.clicked.connect(lambda: self.perf_heatmap.set_mode('tot'))
+            self._btn_diff.clicked.connect(lambda: self.perf_heatmap.set_mode('diff'))
+            mode_bar.addWidget(self._btn_tot)
+            mode_bar.addWidget(self._btn_diff)
+            mode_bar.addStretch()
+            perf_layout.addLayout(mode_bar)
+            perf_layout.addWidget(self.perf_heatmap, 1)
+
+            self._stack.addWidget(self.bar_chart)      # 0
+            self._stack.addWidget(self.wpm_trend)       # 1
+            self._stack.addWidget(self.regression)      # 2
+            self._stack.addWidget(perf_container)        # 3
+            self._stack.addWidget(self.velocity)         # 4
+            self._stack.addWidget(self.efficiency)       # 5
+
+            layout.addWidget(self._stack, 1)
+
+        def _on_select(self, idx):
+            self._stack.setCurrentIndex(idx)
+
+        @property
+        def active_index(self):
+            return self._stack.currentIndex()
+
+
+    class BrailleMainWindow(QMainWindow):
+        """Main PyQtGraph application window for the Braille Touch Performance Monitor."""
+
+        def __init__(self):
+            super().__init__()
+            self.setWindowTitle("Braille Touch Performance Monitor")
+            self.setMinimumSize(1280, 800)
+
+            # PyQtGraph config
+            pg.setConfigOptions(background="#0d1117", foreground="#e6edf3",
+                                antialias=True)
+
+            # Dark palette
+            palette = QPalette()
+            palette.setColor(QPalette.Window, QColor("#0d1117"))
+            palette.setColor(QPalette.WindowText, QColor("#e6edf3"))
+            palette.setColor(QPalette.Base, QColor("#161b22"))
+            palette.setColor(QPalette.Text, QColor("#e6edf3"))
+            self.setPalette(palette)
+            self.setStyleSheet(f"QMainWindow {{ background: {_BG_DARK}; }}")
+
+            self._build_ui()
+
+            # Snapshot cache
+            self._cached_ws = None
+            self._cached_ewiqr = None
+            self._cached_welford = None
+            self._cached_vt = None
+            self._cached_skip = None
+            self._cached_diff = None
+            self._cached_wb = None
+            self._last_snap = 0
+
+            # Update timer — 30fps
+            self._timer = QTimer()
+            self._timer.timeout.connect(self._update)
+            self._timer.start(33)
+
+        def _build_ui(self):
+            central = QWidget()
+            self.setCentralWidget(central)
+            main_layout = QVBoxLayout(central)
+            main_layout.setContentsMargins(8, 8, 8, 8)
+            main_layout.setSpacing(6)
+
+            # ── Top row: Heatmap | Metrics | WordStats ──
+            top_splitter = QSplitter(Qt.Horizontal)
+
+            self._heatmap = HeatmapWidget()
+            top_splitter.addWidget(self._heatmap)
+
+            self._metrics = MetricsPanel()
+            top_splitter.addWidget(self._metrics)
+
+            self._word_stats_panel = WordStatsPanel()
+            top_splitter.addWidget(self._word_stats_panel)
+
+            top_splitter.setSizes([500, 380, 380])
+            main_layout.addWidget(top_splitter, 1)
+
+            # ── Bottom row: Threshold sliders + Edit button ──
+            bottom = QWidget()
+            bottom.setStyleSheet(f"background: {_BG_DARK};")
+            bottom_layout = QHBoxLayout(bottom)
+            bottom_layout.setContentsMargins(4, 4, 4, 4)
+
+            # Threshold sliders
+            slider_group = QGroupBox("ROW TOUCH THRESHOLDS (drag to adjust live)")
+            slider_group.setStyleSheet(f"""
+                QGroupBox {{
+                    color: {_ACCENT_ORANGE};
+                    font-size: 9pt;
+                    font-weight: bold;
+                    border: 1px solid {_BG_BORDER};
+                    border-radius: 4px;
+                    padding-top: 14px;
+                    margin-top: 6px;
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    left: 10px;
+                    padding: 0 4px;
+                }}
+            """)
+            slider_layout = QGridLayout(slider_group)
+            self._threshold_sliders = []
+            for i in range(GRID):
+                lbl = QLabel(f"R{i}")
+                lbl.setStyleSheet(f"color: #a0c4ff; font-family: monospace; font-size: 8pt;")
+                slider_layout.addWidget(lbl, i, 0)
+                sl = QSlider(Qt.Horizontal)
+                sl.setRange(0, 100)  # 0.0 to 50.0 in 0.5 steps
+                sl.setValue(int(ROW_THRESHOLDS[i] * 2))
+                sl.setStyleSheet(f"""
+                    QSlider::groove:horizontal {{
+                        background: #1a1a2e; height: 6px; border-radius: 3px;
+                    }}
+                    QSlider::handle:horizontal {{
+                        background: #e94560; width: 14px; margin: -4px 0;
+                        border-radius: 7px;
+                    }}
+                """)
+                val_lbl = QLabel(f"{ROW_THRESHOLDS[i]:.1f}")
+                val_lbl.setStyleSheet(f"color: {_FG_PRIMARY}; font-family: monospace; font-size: 8pt;")
+                val_lbl.setMinimumWidth(35)
+
+                def _on_slider(value, row=i, vlbl=val_lbl):
+                    real_val = value / 2.0
+                    ROW_THRESHOLDS[row] = real_val
+                    vlbl.setText(f"{real_val:.1f}")
+
+                sl.valueChanged.connect(_on_slider)
+                slider_layout.addWidget(sl, i, 1)
+                slider_layout.addWidget(val_lbl, i, 2)
+                self._threshold_sliders.append(sl)
+
+            bottom_layout.addWidget(slider_group, 1)
+
+            # Edit Words button
+            btn_edit = QPushButton("✎ Edit Words")
+            btn_edit.setStyleSheet(f"""
+                QPushButton {{
+                    background: {_BG_CARD}; color: {_ACCENT_BLUE};
+                    font-size: 10pt; font-weight: bold;
+                    padding: 10px 20px; border: 1px solid {_BG_BORDER};
+                    border-radius: 4px;
+                }}
+                QPushButton:hover {{ background: #21262d; }}
+            """)
+            btn_edit.setCursor(Qt.PointingHandCursor)
+            btn_edit.clicked.connect(self._open_editor)
+            bottom_layout.addWidget(btn_edit)
+
+            main_layout.addWidget(bottom)
+
+            # ── Plot panel (separate window) ──
+            self._plot_window = QMainWindow()
+            self._plot_window.setWindowTitle("Braille Monitor — Plot Panel")
+            self._plot_window.setMinimumSize(900, 550)
+            self._plot_window.setStyleSheet(f"QMainWindow {{ background: {_BG_DARK}; }}")
+            self._plot_panel = PlotPanel()
+            self._plot_window.setCentralWidget(self._plot_panel)
+            self._plot_window.show()
+
+        def _open_editor(self):
+            dlg = WordBoundaryEditorQt(self)
+            dlg.exec_()
+            self._heatmap.refresh_labels()
+
+        def _update(self):
+            """Main 30fps update loop."""
+            now = time.time()
+
+            # ── Read latest frame ──
+            with latest_frame_lk:
+                frame = latest_frame.copy()
+
+            # ── Compute delta + threshold mask ──
+            raw_delta = np.maximum(frame - baseline, 0.0)
+            thresh_delta = raw_delta * (raw_delta >= ROW_THRESHOLDS[:, np.newaxis])
+
+            # ── Update heatmap (every frame, 30fps) ──
+            self._heatmap.update_data(thresh_delta)
+
+            # ── Check for label refresh ──
+            global _cell_labels_dirty
+            if _cell_labels_dirty:
+                _cell_labels_dirty = False
+                self._heatmap.refresh_labels()
+
+            # ── Throttled snapshots (2fps) ──
+            if self._cached_ws is None or (now - self._last_snap) >= _SNAPSHOT_INTERVAL:
+                self._last_snap = now
+                self._cached_diff = cell_diff.snapshot()
+                self._cached_ws = word_stats.snapshot()
+                self._cached_ewiqr = ewiqr_tracker.snapshot()
+                self._cached_welford = welford_per_word.snapshot()
+                self._cached_vt = velocity_tracker.snapshot()
+                with word_boundaries_lock:
+                    self._cached_wb = {k: list(v) for k, v in word_boundaries.items()}
+                self._cached_skip = compute_skip_stats(
+                    self._cached_wb, self._cached_ws["word_count"])
+
+                # ── Update metrics panel ──
+                m = perf.snapshot
+                self._metrics.update_metrics(
+                    m, self._cached_ws, self._cached_vt, self._cached_ewiqr,
+                    self._cached_diff, eff_plot.get_avg_efficiency(),
+                    wpm_trend.get_current_ema(), list(_cached_finger_wpm),
+                    self._cached_skip)
+
+                # ── Update word stats panel ──
+                self._word_stats_panel.update_stats(self._cached_ws, self._cached_skip)
+
+            # ── Update active plot only ──
+            if self._cached_ws is None:
+                return
+
+            idx = self._plot_panel.active_index
+
+            if idx == 0:  # Bar chart
+                self._plot_panel.bar_chart.update_chart(
+                    self._cached_welford, self._cached_ws["word_count"],
+                    self._cached_ewiqr, self._cached_wb)
+
+            elif idx == 1:  # WPM Trend
+                x_raw, y_raw, y_ema, y_max = wpm_trend.get_plot_data()
+                self._plot_panel.wpm_trend.update_trend(x_raw, y_raw, y_ema, y_max)
+
+            elif idx == 2:  # Regression chart
+                with word_stats._lock:
+                    reg_count = dict(word_stats._regression_count)
+                self._plot_panel.regression.update_regressions(
+                    reg_count, self._cached_ws["flagged_words"])
+
+            elif idx == 3:  # Performance heatmap
+                Z_tot = np.zeros((GRID, GRID))
+                Z_diff = np.zeros((GRID, GRID))
+                for r in range(GRID):
+                    for e in self._cached_wb.get(r, []):
+                        w = e["word"]
+                        wf = self._cached_welford.get(w)
+                        if wf:
+                            for c in range(e["start"], e["end"] + 1):
+                                if 0 <= c < GRID:
+                                    Z_tot[r, c] = wf["mean"]
+                        ewiqr_pw = self._cached_ewiqr.get("ewiqr_per_word", {})
+                        if w in ewiqr_pw:
+                            for c in range(e["start"], e["end"] + 1):
+                                if 0 <= c < GRID:
+                                    Z_diff[r, c] = ewiqr_pw[w]
+                self._plot_panel.perf_heatmap.update_perf(Z_tot, Z_diff, self._cached_wb)
+
+            elif idx == 4:  # Velocity profile
+                with vel_profile._lock:
+                    vel_snap = list(vel_profile._velocity_history)
+                self._plot_panel.velocity.update_velocities(vel_snap)
+
+            elif idx == 5:  # Path efficiency
+                with eff_plot._lock:
+                    eff_hist = list(eff_plot.efficiency_history)
+                    evt_idx = list(eff_plot.event_indices)
+                cached_tx = eff_plot._cached_trend_x
+                cached_ty = eff_plot._cached_trend_y
+                self._plot_panel.efficiency.update_efficiency(
+                    eff_hist, evt_idx, cached_tx, cached_ty)
+
+            # ── Check editor request (from legacy code path) ──
+            if _editor_requested.is_set():
+                _editor_requested.clear()
+                self._open_editor()
+
+        def closeEvent(self, event):
+            """Print final report and clean up."""
+            self._timer.stop()
+            if hasattr(self, '_plot_window'):
+                self._plot_window.close()
+            _print_final_report()
+            event.accept()
+
+
+    def _print_final_report():
+        """Print comprehensive session report to console."""
+        ws = word_stats.snapshot()
+        print("\n═══ FINAL WORD STATS ═══")
+        print(f"Total registered touches : {ws['total_registered']}")
+        print(f"Most touched word        : {ws['most_touched']}")
+        print(f"Hardest word             : {ws['hardest_word']}  "
+              f"(avg D={ws['hardest_word_d']:.3f})")
+        print(f"Final WPM (sliding window): {perf._wpm_counter.get_wpm()}")
+        print(f"Final WPM trend (EMA)    : {wpm_trend.get_current_ema():.1f}")
+
+        # Per-finger summary
+        print("\n═══ PER-FINGER STATS (Butterfly) ═══")
+        for fi in range(2):
+            ft = finger_trackers[fi]
+            fi_ws = ft["word_stats"].snapshot()
+            fi_wpm = ft["perf"]._wpm_counter.get_wpm()
+            fi_trend = ft["wpm_trend"].get_current_ema()
+            fi_vt = ft["velocity"].snapshot()
+            print(f"\n── Finger {fi} ──")
+            print(f"  Touches: {fi_ws['total_registered']}")
+            print(f"  WPM: {fi_wpm:.0f}  (EMA trend: {fi_trend:.1f})")
+            print(f"  Regressions: {fi_ws['total_regressions']}")
+            print(f"  Velocity: {fi_vt['mean_vel']:.1f} cells/s  "
+                  f"consistency: {fi_vt['consistency']:.2f}")
+
+        # WPM trend report
+        _, y_raw_final, y_ema_final, _ = wpm_trend.get_plot_data()
+        if y_ema_final:
+            print(f"\n═══ WPM TREND REPORT  [V-4] ═══")
+            print(f"Raw WPM samples          : {len(y_raw_final)}")
+            print(f"Peak raw WPM             : {max(y_raw_final):.0f}")
+            print(f"Min raw WPM              : {min(y_raw_final):.0f}")
+            print(f"Final EMA WPM            : {y_ema_final[-1]:.1f}")
+            if len(y_ema_final) > 10:
+                avg_ema = sum(y_ema_final) / len(y_ema_final)
+                print(f"Session avg EMA WPM      : {avg_ema:.1f}")
+                print(f"Peak sustained WPM (EMA) : {max(y_ema_final):.1f}")
+
+        # Regression report
+        print("\n═══ REGRESSION REPORT  [M-H1] ═══")
+        print(f"Total regressions        : {ws['total_regressions']}")
+        print(f"Hesitation rate          : {ws['hesitation_rate']*100:.1f}%  "
+              f"({ws['total_regressions']} regressions / "
+              f"{ws['total_registered']} touches)")
+        if ws["top_regressed"]:
+            print("\n── Top regressed words ──")
+            for word, cnt in ws["top_regressed"]:
+                flag = "  ⚠ FLAGGED" if word in ws["flagged_words"] else ""
+                print(f"  {word:<14}: {cnt} regression(s){flag}")
+        if ws["flagged_words"]:
+            print(f"\n── Flagged words (>{REGRESSION_FLAG_THRESHOLD} regressions) ──")
+            for w in ws["flagged_words"]:
+                print(f"  {w}")
+        else:
+            print("\nNo words flagged for excessive regressions.")
+
+        # EWIQR report
+        final_ewiqr = ewiqr_tracker.snapshot()
+        final_welf = welford_per_word.snapshot()
+        print("\n═══ EWIQR DIFFICULTY REPORT  [M-D2] ═══")
+        top5_final = final_ewiqr.get("top5_hardest", [])
+        if top5_final:
+            print("\n── Top 5 hardest (by EWIQR) ──")
+            for rank, (tw, tewiqr) in enumerate(top5_final, 1):
+                tconf = final_ewiqr["confidence_per_word"].get(tw, "?")
+                tq1 = final_ewiqr["Q1_per_word"].get(tw, 0)
+                tq3 = final_ewiqr["Q3_per_word"].get(tw, 0)
+                print(f"  {rank}. {tw:<14}: EWIQR={tewiqr:.3f}s  "
+                      f"Q1={tq1:.2f}s  Q3={tq3:.2f}s  [{tconf}]")
+        else:
+            print("  (not enough data for EWIQR ranking)")
+
+        if final_welf:
+            total_n = sum(v["n"] for v in final_welf.values())
+            if total_n > 0:
+                session_avg = sum(v["mean"] * v["n"] for v in final_welf.values()) / total_n
+                print(f"\nSession avg duration     : {session_avg:.3f}s")
+            print("\n── Per-word Welford stats ──")
+            for w_name in sorted(final_welf.keys()):
+                wf = final_welf[w_name]
+                print(f"  {w_name:<14}: n={wf['n']:>3}  "
+                      f"mean={wf['mean']:.3f}s  std={wf['std']:.3f}s")
+
+        # Skip stats
+        with word_boundaries_lock:
+            wb_final = {k: list(v) for k, v in word_boundaries.items()}
+        skip_final = compute_skip_stats(wb_final, ws["word_count"])
+        skip_clusters = compute_skip_clusters(skip_final["skip_mask"])
+        print("\n═══ SKIP STATISTICS REPORT  [M-D3] ═══")
+        print(f"Skip rate                : {skip_final['skip_rate']:.1f}%")
+        print(f"Skipped words            : {len(skip_final['skipped_words'])} / "
+              f"{skip_final.get('total_words', GRID*GRID)}")
+
+        # Word counts
+        print("\n── Word counts ──")
+        for word, count in sorted(ws["word_count"].items(),
+                                   key=lambda x: x[1], reverse=True):
+            print(f"  {word:<14}: {count}")
+        print("\n── Touch sequence (last 20) ──")
+        print("  " + " → ".join(ws["touch_sequence"]))
+
+
+    def _run_pyqtgraph_ui():
+        """Entry point for the PyQtGraph real-time UI."""
+        app = QApplication(sys.argv)
+        app.setStyle("Fusion")
+
+        # Dark palette for the entire application
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor("#0d1117"))
+        palette.setColor(QPalette.WindowText, QColor("#e6edf3"))
+        palette.setColor(QPalette.Base, QColor("#161b22"))
+        palette.setColor(QPalette.AlternateBase, QColor("#21262d"))
+        palette.setColor(QPalette.Text, QColor("#e6edf3"))
+        palette.setColor(QPalette.Button, QColor("#161b22"))
+        palette.setColor(QPalette.ButtonText, QColor("#e6edf3"))
+        palette.setColor(QPalette.Highlight, QColor("#58a6ff"))
+        palette.setColor(QPalette.HighlightedText, QColor("#0d1117"))
+        app.setPalette(palette)
+
+        win = BrailleMainWindow()
+        win.show()
+
+        try:
+            sys.exit(app.exec_())
+        except SystemExit:
+            pass
+        finally:
+            try:
+                ser.close()
+            except Exception:
+                pass
+
+# ═══════════════════════════ ENTRY POINT ══════════════════════════
+if not _LEGACY_MODE:
+    _run_pyqtgraph_ui()
