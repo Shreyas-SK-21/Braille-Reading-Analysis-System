@@ -568,8 +568,7 @@ def _rebuild_cell_word_cache() -> None:
     new_cache: dict[tuple, str] = {}
     for r in range(GRID):
         for raw_c in range(GRID):
-            logical_c = (raw_c + TX_SHIFT) % GRID
-            w = get_word_from_touch(r, logical_c)
+            w = get_word_from_touch(r, raw_c)
             new_cache[(r, raw_c)] = w if w else ""
     with _cell_word_cache_lock:
         _cell_word_cache.clear()
@@ -4628,8 +4627,7 @@ if _LEGACY_MODE:
     _cell_texts: dict = {}
     for r in range(GRID):
         for raw_c in range(GRID):
-            logical_c = (raw_c + TX_SHIFT) % GRID
-            coord_str = f"{r},{logical_c}"
+            coord_str = f"{r},{raw_c}"
             with _cell_word_cache_lock:
                 word_str = _cell_word_cache.get((r, raw_c), "")
             label = f"{coord_str}\n{word_str}" if word_str else coord_str
@@ -5518,9 +5516,8 @@ else:
             self._cell_texts = {}
             for r in range(GRID):
                 for c in range(GRID):
-                    logical_c = (c + TX_SHIFT) % GRID
-                    word = get_word_from_touch(r, logical_c) or ""
-                    coord = f"{r},{logical_c}"
+                    word = get_word_from_touch(r, c) or ""
+                    coord = f"{r},{c}"
                     label = f"{coord}\n{word}" if word else coord
                     txt = pg.TextItem(label, color="#5a8a5a", anchor=(0.5, 0.5))
                     txt.setFont(QFont("Courier New", 7))
@@ -5548,9 +5545,8 @@ else:
             """Rebuild cell labels after word boundary changes."""
             for r in range(GRID):
                 for c in range(GRID):
-                    logical_c = (c + TX_SHIFT) % GRID
-                    word = get_word_from_touch(r, logical_c) or ""
-                    coord = f"{r},{logical_c}"
+                    word = get_word_from_touch(r, c) or ""
+                    coord = f"{r},{c}"
                     label = f"{coord}\n{word}" if word else coord
                     self._cell_texts[(r, c)].setText(label)
 
