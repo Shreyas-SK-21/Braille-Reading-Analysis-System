@@ -5704,6 +5704,16 @@ else:
             self._word_list = []
             self._inited = False
 
+            # ── Ensure bottom-axis word labels are always visible ──
+            bottom_ax = self.getAxis('bottom')
+            _tick_font = QFont("Courier New", 7)
+            bottom_ax.setTickFont(_tick_font)
+            bottom_ax.setTextPen(pg.mkPen(_FG_MUTED))
+            bottom_ax.setStyle(tickTextOffset=6, autoExpandTextSpace=True,
+                               autoReduceTextSpace=False)
+            # Reserve extra space at the bottom for word labels
+            bottom_ax.setHeight(50)
+
         def update_chart(self, welford_snap, word_count, ewiqr_snap, wb_snap):
             now = time.time()
             if now - self._last_update < 0.5:
@@ -5756,9 +5766,13 @@ else:
                                       for v in welford_snap.values()) / total_n
                     self.addLine(y=session_avg, pen=pg.mkPen("#00ffaa", style=Qt.DashLine, width=1.5))
 
-            # X-axis labels
+            # X-axis word labels — force every word to appear as a tick
             ax = self.getAxis('bottom')
             ax.setTicks([[(i, w) for i, w in enumerate(word_list)]])
+            # Re-apply font & pen after clear() to guarantee visibility
+            _tick_font = QFont("Courier New", 7)
+            ax.setTickFont(_tick_font)
+            ax.setTextPen(pg.mkPen(_FG_MUTED))
             self._word_list = word_list
 
 
@@ -5773,14 +5787,27 @@ else:
             self.setLabel('bottom', "Session Time (s)", color=_FG_MUTED)
             self.showGrid(y=True, alpha=0.3)
 
+            # Legend must be added before plot items for pyqtgraph
+            self.addLegend(offset=(10, 10))
+
             self._line_raw = self.plot([], [], pen=pg.mkPen("#334466", width=1), name="Raw WPM")
             self._line_ema = self.plot([], [], pen=pg.mkPen("#00ffaa", width=2.5), name="EMA Trend")
 
-            # Reference lines
+            # Reference lines with text annotations
             self.addLine(y=50, pen=pg.mkPen("#ffaa00", style=Qt.DashLine, width=0.9))
-            self.addLine(y=100, pen=pg.mkPen("#00aaff", style=Qt.DashLine, width=0.9))
+            _lbl_50 = pg.TextItem("50 WPM (beginner)", color="#ffaa00", anchor=(1.0, 1.0))
+            _lbl_50.setFont(QFont("sans-serif", 7))
+            _lbl_50.setPos(10, 50)
+            self.addItem(_lbl_50)
+            self._lbl_50 = _lbl_50
 
-            self.addLegend(offset=(10, 10))
+            self.addLine(y=100, pen=pg.mkPen("#00aaff", style=Qt.DashLine, width=0.9))
+            _lbl_100 = pg.TextItem("100 WPM (intermediate)", color="#00aaff", anchor=(1.0, 1.0))
+            _lbl_100.setFont(QFont("sans-serif", 7))
+            _lbl_100.setPos(10, 100)
+            self.addItem(_lbl_100)
+            self._lbl_100 = _lbl_100
+
             self._last_update = 0
 
         def update_trend(self, x_raw, y_raw, y_ema, y_max):
@@ -5794,7 +5821,11 @@ else:
             self._line_raw.setData(x_raw, y_raw)
             self._line_ema.setData(x_raw, y_ema)
             self.setYRange(0, max(10, y_max))
-            self.setXRange(x_raw[0], max(x_raw[-1], 10))
+            x_end = max(x_raw[-1], 10)
+            self.setXRange(x_raw[0], x_end)
+            # Keep reference labels pinned to right edge
+            self._lbl_50.setPos(x_end, 50)
+            self._lbl_100.setPos(x_end, 100)
 
 
     class RegressionChartWidget(pg.PlotWidget):
@@ -5956,11 +5987,12 @@ else:
             self.showGrid(y=True, alpha=0.3)
             self.addLine(y=0, pen=pg.mkPen("w", width=0.5, style=Qt.SolidLine))
             self._lines_past = []
+            # Legend must be added before plot items for pyqtgraph
+            self.addLegend(offset=(10, 10))
             self._line_recent = self.plot([], [], pen=pg.mkPen("#1f77b4", width=2.5),
                                            name="Most recent")
             self._line_mean = self.plot([], [], pen=pg.mkPen("#ff7f0e", width=2,
                                              style=Qt.DashLine), name="Weighted mean")
-            self.addLegend(offset=(10, 10))
             self._last_update = 0
 
         def update_velocities(self, vel_history_snapshot, alpha_weight=0.15):
@@ -6043,12 +6075,38 @@ else:
                 b.setZValue(-10)
                 self.addItem(b)
 
+            # Tier text labels (right edge)
+            _lbl_prof = pg.TextItem("Proficient", color="#2ca02c", anchor=(1.0, 0.5))
+            _lbl_prof.setFont(QFont("sans-serif", 7))
+            _lbl_prof.setPos(10, 0.90)
+            self.addItem(_lbl_prof)
+            self._lbl_prof = _lbl_prof
+
+            _lbl_dev = pg.TextItem("Developing", color="#ff7f0e", anchor=(1.0, 0.5))
+            _lbl_dev.setFont(QFont("sans-serif", 7))
+            _lbl_dev.setPos(10, 0.65)
+            self.addItem(_lbl_dev)
+            self._lbl_dev = _lbl_dev
+
+            _lbl_str = pg.TextItem("Struggling", color="#d62728", anchor=(1.0, 0.5))
+            _lbl_str.setFont(QFont("sans-serif", 7))
+            _lbl_str.setPos(10, 0.25)
+            self.addItem(_lbl_str)
+            self._lbl_str = _lbl_str
+
+            # Legend must be added before plot items for pyqtgraph
+            self.addLegend(offset=(10, 10))
+
             self._scatter = pg.ScatterPlotItem(size=8, pen=pg.mkPen("w", width=0.3))
             self.addItem(self._scatter)
-            self._conn_line = self.plot([], [], pen=pg.mkPen("#66aaff", width=1.2))
+            self._conn_line = self.plot([], [], pen=pg.mkPen("#66aaff", width=1.2),
+                                        name="Path")
             self._conn_line.setOpacity(0.5)
-            self._trend_line = self.plot([], [], pen=pg.mkPen("#ff7f0e", width=3))
-            self.addLegend(offset=(10, 10))
+            self._trend_line = self.plot([], [], pen=pg.mkPen("#ff7f0e", width=3),
+                                         name="Trend (LOWESS)")
+            # Proficiency target proxy for legend
+            self.plot([], [], pen=pg.mkPen("#2ca02c", width=1.5, style=Qt.DashLine),
+                      name="Proficiency target (η=0.8)")
             self._last_update = 0
 
         def update_efficiency(self, eff_hist, evt_idx, cached_trend_x, cached_trend_y):
@@ -6079,7 +6137,12 @@ else:
                 self._trend_line.setData(cached_trend_x, cached_trend_y)
 
             if evt_idx:
-                self.setXRange(0, max(evt_idx) + 5)
+                x_end = max(evt_idx) + 5
+                self.setXRange(0, x_end)
+                # Keep tier labels pinned to right edge
+                self._lbl_prof.setPos(x_end - 1, 0.90)
+                self._lbl_dev.setPos(x_end - 1, 0.65)
+                self._lbl_str.setPos(x_end - 1, 0.25)
 
 
     class PlotPanel(QWidget):
