@@ -316,13 +316,13 @@ _active_finger_view = 2
 
 text_grid = [
     # (word, num_blocks)  — num_blocks per row must sum to GRID (7)
-    [("Ant", 1),    ("Socks", 1),  ("Alligator", 1), ("Apple", 1),   ("Sun", 1),    ("Tree", 1),   ("Star", 1)   ],  # row 0
-    [("Snail", 1),  ("Turtle", 1), ("Pen", 1),       ("Parrot", 1),  ("Shoes", 1),  ("Net", 1),    ("Boat", 1)   ],  # row 1
-    [("Fifth", 1),  ("Switch", 1), ("Knot", 1),      ("Nest", 1),    ("Nose", 1),   ("Crab", 1),   ("Cat", 1)    ],  # row 2
-    [("Cow", 1),    ("Egg", 1),    ("Elephant", 1),  ("Elbow", 1),   ("Hand", 1),   ("Door", 1),   ("Lamp", 1)   ],  # row 3
-    [("Hen", 1),    ("Moon", 1),   ("House", 1),     ("Comb", 1),    ("Rose", 1),   ("Rabbit", 1), ("Drum", 1)   ],  # row 4
-    [("Mango", 1),  ("Mat", 1),    ("Scissors", 1),  ("Dog", 1),     ("Frock", 1),  ("Drum", 1),   ("Bell", 1)   ],  # row 5
-    [("Grape", 1),  ("Fog", 1),    ("Frog", 1),      ("Doll", 1),    ("Duck", 1),   ("Nut", 1),    ("Kite", 1)   ],  # row 6
+    [("Ant", 2),    ("Socks", 3),  ("Alligator", 2), ("Apple", 1),   ("Sun", 1),    ("Tree", 1),   ("Star", 1)   ],  # row 0
+    [("Snail", 2),  ("Turtle", 3), ("Pen", 2),       ("Parrot", 1),  ("Shoes", 1),  ("Net", 1),    ("Boat", 1)   ],  # row 1
+    [("Fifth", 2),  ("Switch", 4), ("Knot", 1),      ("Nest", 1),    ("Nose", 1),   ("Crab", 1),   ("Cat", 1)    ],  # row 2
+    [("Cow", 2),    ("Egg", 2),    ("Elephant", 3),  ("Elbow", 1),   ("Hand", 1),   ("Door", 1),   ("Lamp", 1)   ],  # row 3
+    [("Hen", 2),    ("Moon", 3),   ("House", 2),     ("Comb", 1),    ("Rose", 1),   ("Rabbit", 1), ("Drum", 1)   ],  # row 4
+    [("Mango", 3),  ("Mat", 2),    ("Scissors", 2),  ("Dog", 1),     ("Frock", 1),  ("Drum", 1),   ("Bell", 1)   ],  # row 5
+    [("Grape", 3),  ("Fog", 2),    ("Frog", 2),      ("Doll", 1),    ("Duck", 1),   ("Nut", 1),    ("Kite", 1)   ],  # row 6
     # ── rows below are beyond the 7-row sensor — kept for reference ──
     [("Umbrella", 1), ("Bell", 1),  ("Brush", 1),  ("Car", 1),   ("Clock", 1),  ("Flag", 1),  ("Hat", 1)  ],
     [("Butterfly", 1),("Zebra", 1), ("Rail", 1),   ("Nail", 1),  ("Chain", 1),  ("Ring", 1),  ("Sock", 1) ],
