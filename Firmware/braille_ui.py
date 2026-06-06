@@ -215,7 +215,7 @@ CAL_FRAMES  = 10
 TX_SHIFT    = -1          # logical_col = (raw_col + TX_SHIFT) % GRID
 
 # Per-row ADC-delta thresholds — tune until idle noise stays below them
-ROW_THRESHOLDS = np.array([5, 3, 5, 5, 10, 15, 15], dtype=float)
+ROW_THRESHOLDS = np.array([30, 25, 30, 30, 30, 30, 30], dtype=float)
 
 MIN_PRESSED_CELLS    = 1
 BOLD_PEAK_POWER      = 2.0
@@ -316,20 +316,13 @@ _active_finger_view = 2
 
 text_grid = [
     # (word, num_blocks)  — num_blocks per row must sum to GRID (7)
-    [("Ant", 2),    ("Socks", 3),  ("Alligator", 2), ("Apple", 1),   ("Sun", 1),    ("Tree", 1),   ("Star", 1)   ],  # row 0
-    [("Snail", 2),  ("Turtle", 3), ("Pen", 2),       ("Parrot", 1),  ("Shoes", 1),  ("Net", 1),    ("Boat", 1)   ],  # row 1
-    [("Fifth", 2),  ("Switch", 4), ("Knot", 1),      ("Nest", 1),    ("Nose", 1),   ("Crab", 1),   ("Cat", 1)    ],  # row 2
-    [("Cow", 2),    ("Egg", 2),    ("Elephant", 3),  ("Elbow", 1),   ("Hand", 1),   ("Door", 1),   ("Lamp", 1)   ],  # row 3
-    [("Hen", 2),    ("Moon", 3),   ("House", 2),     ("Comb", 1),    ("Rose", 1),   ("Rabbit", 1), ("Drum", 1)   ],  # row 4
-    [("Mango", 3),  ("Mat", 2),    ("Scissors", 2),  ("Dog", 1),     ("Frock", 1),  ("Drum", 1),   ("Bell", 1)   ],  # row 5
-    [("Grape", 3),  ("Fog", 2),    ("Frog", 2),      ("Doll", 1),    ("Duck", 1),   ("Nut", 1),    ("Kite", 1)   ],  # row 6
-    # ── rows below are beyond the 7-row sensor — kept for reference ──
-    [("Umbrella", 1), ("Bell", 1),  ("Brush", 1),  ("Car", 1),   ("Clock", 1),  ("Flag", 1),  ("Hat", 1)  ],
-    [("Butterfly", 1),("Zebra", 1), ("Rail", 1),   ("Nail", 1),  ("Chain", 1),  ("Ring", 1),  ("Sock", 1) ],
-    [("Jam", 1),    ("Jar", 1),    ("Juice", 1),    ("Coat", 1),    ("Goat", 1),   ("Soap", 1),  ("Tie", 1)    ],
-    [("Pie", 1),    ("Flies", 1),  ("Sheep", 1),    ("Tree", 1),    ("Teeth", 1),  ("Corn", 1),  ("Horn", 1)   ],
-    [("Zoo", 1),    ("Kite", 1),   ("Swan", 1),     ("Swing", 1),   ("Glove", 1),  ("Van", 1),   ("Foot", 1)   ],
-    [("Book", 1),   ("Boot", 1),   ("Wool", 1),     ("for", 1),     ("Ring", 1),   ("Foot", 1),  ("Coat", 1)   ],
+    [("Ant", 2),    ("Socks", 3),  ("Alligator", 2)  ],  # row 0
+    [("Snail", 2),  ("Turtle", 3), ("Pen", 2)   ],  # row 1
+    [("Fifth", 2),  ("Switch", 4), ("Knot", 1)    ],  # row 2
+    [("Cow", 2),    ("Egg", 2),    ("Elephant", 3)   ],  # row 3
+    [("Hen", 2),    ("Moon", 3),   ("House", 2)   ],  # row 4
+    [("Mango", 3),  ("Mat", 2),    ("Scissors", 2)   ],  # row 5
+    [("Grape", 3),  ("Fog", 2),    ("Frog", 2)],  # row 6
 ]
 
 # ══════════════════════════════════════════════════════════════
