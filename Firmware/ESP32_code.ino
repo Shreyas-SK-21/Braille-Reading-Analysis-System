@@ -107,7 +107,7 @@ void loop()
     setTX(tx);
 
     // allow mux + RC network to settle
-    //delayMicroseconds(25);
+    delayMicroseconds(25);
 
     for(int rx = 0; rx < RX_COUNT; rx++)
     {
