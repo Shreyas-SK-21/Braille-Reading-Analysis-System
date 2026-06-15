@@ -72,9 +72,10 @@ Live Metrics & Visualizations
 
 - Python
 - NumPy
-- Matplotlib
 - SciPy
+- Matplotlib
 - PySerial
+- Threading
 
 ---
 
@@ -92,10 +93,9 @@ Live Metrics & Visualizations
 
 ```text
 .
-├── firmware/          # ESP32 firmware
-├── analytics/         # Metrics and processing pipeline
-├── visualization/     # Live dashboards and plots
-├── docs/              # Documentation and paper
+├── Docs/           # Project documentation, paper, and supporting material
+├── Firmware/       # ESP32 firmware and hardware-side code
+├── .gitignore
 └── README.md
 ```
 
@@ -120,6 +120,13 @@ iMTech ECE, IIIT Bangalore
 iMTech ECE, IIIT Bangalore
 
 ---
+
+## Documentation
+
+Additional documentation, figures, and the accompanying research paper can be found in the `Docs/` directory.
+
+**Paper:**  
+*A Low-Cost Conductive Grid System for Real-Time Multi-Metric Braille Reading Performance Analysis* :contentReference[oaicite:0]{index=0}
 
 ## Paper
 
