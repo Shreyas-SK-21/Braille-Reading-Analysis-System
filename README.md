@@ -4,7 +4,7 @@ A low-cost conductive grid-based platform for real-time Braille reading behavior
 
 The system combines a custom conductive sensing grid, an ESP32-based acquisition unit, and a Python analytics pipeline to capture touch interactions and compute multiple Braille reading performance metrics in real time.
 
-For complete system design, algorithms, hardware architecture, and experimental evaluation, refer to the accompanying research paper. :contentReference[oaicite:0]{index=0}
+For complete system design, algorithms, hardware architecture, and experimental evaluation, refer to the accompanying research paper.
 
 ---
 
