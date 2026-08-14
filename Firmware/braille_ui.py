@@ -168,6 +168,22 @@ import bisect
 import warnings
 warnings.filterwarnings("ignore")
 
+# ─── Weight preset CLI flag ──────────────────────────────────
+_PRESET = next((a for a in sys.argv if a.startswith("--weight-preset=")), None)
+_WEIGHT_PRESET = _PRESET.split("=", 1)[1] if _PRESET else "default"
+# Presets: default | speed_focused | accuracy_focused
+# default:          W1=1.0 W2=0.5 W3=2.0 (original)
+# speed_focused:    W1=0.5 W2=0.3 W3=3.0 (penalise slow more)
+# accuracy_focused: W1=2.0 W2=1.0 W3=1.0 (penalise reversals/jitter more)
+_PRESET_MAP = {
+    "default":          (1.0, 0.5, 2.0),
+    "speed_focused":    (0.5, 0.3, 3.0),
+    "accuracy_focused": (2.0, 1.0, 1.0),
+}
+if _WEIGHT_PRESET not in _PRESET_MAP:
+    print(f"[WARNING] Unknown weight preset '{_WEIGHT_PRESET}', using 'default'.")
+    _WEIGHT_PRESET = "default"
+
 # ═══════════════════════════ MODE FLAG ═════════════════════════
 # Run with --legacy to use the original Matplotlib/Tkinter UI.
 # Default (no flag) uses the new PyQtGraph/PyQt5 real-time UI.
@@ -239,10 +255,10 @@ ROLL_WINDOW     = 60
 UI_FPS          = 30            # ↑ from 20 — ~33ms/frame (was 50ms), 17ms less display lag
 FRAME_QUEUE_MAX = 1
 
-# ── Difficulty Score weights ──────────────────────────────────
-W1 = 1.0
-W2 = 0.5
-W3 = 2.0
+# ── Difficulty Score weights (set by --weight-preset flag) ────
+W1, W2, W3 = _PRESET_MAP[_WEIGHT_PRESET]
+_WEIGHT_NOTE = f"Weight preset: {_WEIGHT_PRESET}  W1={W1} W2={W2} W3={W3}"
+print(f"[CONFIG] {_WEIGHT_NOTE}")
 
 # ── M-H1: Regression flag threshold ──────────────────────────
 # Words touched more than this many times as regressions are "flagged"
@@ -287,6 +303,21 @@ _ACCENT_GREEN  = "#3fb950"   # accuracy/good
 _ACCENT_ORANGE = "#f0883e"   # difficulty/warning
 _ACCENT_RED    = "#f85149"   # errors/danger
 _GRID_COLOR    = "#21262d"   # grid lines
+
+# ── Bill of Materials — cost breakdown (validates 'low-cost' claim) ──────
+HARDWARE_COST_USD = {
+    "ESP32 dev board":          4.00,   # e.g. ESP32-WROOM-38-pin
+    "Copper tape (1m roll)":    2.50,   # conductive grid electrodes
+    "Multiplexer IC (2x CD4051)": 0.80, # 8:1 analog mux for rows+cols
+    "Resistors + capacitors":   0.30,   # passive components
+    "USB cable":                0.50,
+    "Braille overlay sheet":    1.00,   # printed or embossed
+    "PCB / perfboard":          1.50,   # optional; breadboard = $0
+    "Misc (wire, headers)": 0.50,
+}
+_TOTAL_COST_USD = sum(HARDWARE_COST_USD.values())
+print(f"[CONFIG] Estimated hardware cost: ${_TOTAL_COST_USD:.2f} USD")
+print(f"[CONFIG] BOM: {list(HARDWARE_COST_USD.keys())}")
 
 # Font stack — first available is used
 if _LEGACY_MODE:
@@ -1112,11 +1143,33 @@ def read_frame(ser: serial.Serial) -> np.ndarray:
         if not line:
             continue
         parts = line.split()
-        if len(parts) != GRID:
-            continue
-        try:
-            rows.append(list(map(int, parts)))
-        except ValueError:
+        # Firmware now appends a CHK{byte} token after the 7 ADC values.
+        # Accept rows of length GRID (legacy, no checksum) or GRID+1 (with checksum).
+        if len(parts) == GRID + 1 and parts[-1].startswith("CHK"):
+            # Validate XOR checksum
+            try:
+                chk_received = int(parts[-1][3:])
+            except ValueError:
+                continue  # malformed checksum token — discard
+            data_parts = parts[:GRID]
+            try:
+                vals = list(map(int, data_parts))
+            except ValueError:
+                continue
+            chk_computed = 0
+            for v in vals:
+                chk_computed ^= (v & 0xFF)
+            if chk_computed != chk_received:
+                # Checksum mismatch — discard corrupted frame row
+                continue
+            rows.append(vals)
+        elif len(parts) == GRID:
+            # Legacy firmware (no checksum) — accept as-is
+            try:
+                rows.append(list(map(int, parts)))
+            except ValueError:
+                continue
+        else:
             continue
     return np.array(rows, dtype=float)
 
@@ -3536,6 +3589,298 @@ class PerformanceMetrics:
         )
 
 
+# ══════════════════════════════════════════════════════════════
+# DATA LOGGER — Session CSV export + Publication-quality PNGs
+# ══════════════════════════════════════════════════════════════
+
+import csv
+import os
+from datetime import datetime
+
+class DataLogger:
+    """
+    Thread-safe session data logger.
+
+    Opens two CSVs in session_data/ at startup:
+      - touch_events.csv  : one row per finalised touch
+      - metrics_snapshots.csv : periodic metric snapshots
+
+    At session end, generate_figures() saves publication-quality
+    PNG plots (white background, dpi=150) for paper use.
+    """
+
+    TOUCH_HEADERS = [
+        "timestamp", "word", "row", "col",
+        "duration_ms", "vel_mean", "reversals", "zero_crossings",
+        "difficulty", "is_regression", "wpm", "path_efficiency",
+    ]
+    SNAPSHOT_HEADERS = [
+        "timestamp", "wpm", "consistency", "regression_rate",
+        "skip_rate", "path_efficiency", "composite_difficulty",
+    ]
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        os.makedirs("session_data", exist_ok=True)
+        self._session_dir = "session_data"
+        self._ts = ts
+
+        touch_path = os.path.join(self._session_dir, f"{ts}_touch_events.csv")
+        snap_path  = os.path.join(self._session_dir, f"{ts}_metrics_snapshots.csv")
+
+        self._touch_file = open(touch_path, "w", newline="", encoding="utf-8")
+        self._snap_file  = open(snap_path,  "w", newline="", encoding="utf-8")
+
+        self._touch_writer = csv.DictWriter(self._touch_file,
+                                             fieldnames=self.TOUCH_HEADERS)
+        self._snap_writer  = csv.DictWriter(self._snap_file,
+                                             fieldnames=self.SNAPSHOT_HEADERS)
+        self._touch_writer.writeheader()
+        self._snap_writer.writeheader()
+
+        self._touch_file.flush()
+        self._snap_file.flush()
+
+        print(f"[DataLogger] Session CSVs: {touch_path}, {snap_path}")
+
+    def log_touch(self, timestamp, word, row, col, duration_ms,
+                  vel_mean, reversals, zero_crossings, difficulty,
+                  is_regression, wpm, path_efficiency):
+        """Log one finalised touch event."""
+        with self._lock:
+            try:
+                self._touch_writer.writerow({
+                    "timestamp":      f"{timestamp:.3f}",
+                    "word":           word or "",
+                    "row":            row,
+                    "col":            col,
+                    "duration_ms":    f"{duration_ms:.1f}",
+                    "vel_mean":       f"{vel_mean:.3f}",
+                    "reversals":      reversals,
+                    "zero_crossings": zero_crossings,
+                    "difficulty":     f"{difficulty:.3f}",
+                    "is_regression":  int(is_regression),
+                    "wpm":            f"{wpm:.1f}",
+                    "path_efficiency": f"{path_efficiency:.3f}",
+                })
+                self._touch_file.flush()
+            except Exception:
+                pass
+
+    def log_snapshot(self, timestamp, wpm, consistency, regression_rate,
+                     skip_rate, path_efficiency, composite_difficulty):
+        """Log a periodic metrics snapshot."""
+        with self._lock:
+            try:
+                self._snap_writer.writerow({
+                    "timestamp":           f"{timestamp:.3f}",
+                    "wpm":                 f"{wpm:.1f}",
+                    "consistency":         f"{consistency:.3f}",
+                    "regression_rate":     f"{regression_rate:.3f}",
+                    "skip_rate":           f"{skip_rate:.1f}",
+                    "path_efficiency":     f"{path_efficiency:.3f}",
+                    "composite_difficulty": f"{composite_difficulty:.3f}",
+                })
+                self._snap_file.flush()
+            except Exception:
+                pass
+
+    def close(self):
+        """Flush and close both CSV files."""
+        with self._lock:
+            try:
+                self._touch_file.flush()
+                self._touch_file.close()
+            except Exception:
+                pass
+            try:
+                self._snap_file.flush()
+                self._snap_file.close()
+            except Exception:
+                pass
+
+    def generate_figures(self, wpm_x, wpm_raw, wpm_ema,
+                         regression_count, flagged_words,
+                         vel_history, eff_history, eff_indices,
+                         diff_z, wb_snap, weight_note=""):
+        """
+        Generate and save publication-quality PNG figures.
+        All figures: white background, dpi=150, proper labels.
+        """
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        import numpy as np
+
+        style = {
+            "figure.facecolor": "white",
+            "axes.facecolor":   "white",
+            "axes.edgecolor":   "#333333",
+            "axes.grid":        True,
+            "grid.color":       "#dddddd",
+            "text.color":       "#222222",
+            "axes.labelcolor":  "#222222",
+            "xtick.color":      "#444444",
+            "ytick.color":      "#444444",
+            "font.family":      "sans-serif",
+        }
+
+        def _savefig(fig, name):
+            path = os.path.join(self._session_dir, f"{self._ts}_{name}")
+            fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
+            plt.close(fig)
+            print(f"[DataLogger] Saved figure: {path}")
+
+        with plt.style.context(style):
+
+            # ── 1. WPM Trend ───────────────────────────────────────
+            if wpm_x and wpm_raw:
+                fig, ax = plt.subplots(figsize=(10, 4))
+                ax.plot(wpm_x, wpm_raw, color="#bbbbbb", linewidth=1.0,
+                        label="Raw WPM", alpha=0.7)
+                if wpm_ema:
+                    ax.plot(wpm_x, wpm_ema, color="#1a6fcc", linewidth=2.2,
+                            label="EMA Trend")
+                ax.axhline(50,  color="#e67e22", linestyle="--", linewidth=1,
+                           alpha=0.7, label="50 WPM (beginner)")
+                ax.axhline(100, color="#27ae60", linestyle="--", linewidth=1,
+                           alpha=0.7, label="100 WPM (intermediate)")
+                ax.set_xlabel("Session Time (s)", fontsize=11)
+                ax.set_ylabel("Words Per Minute", fontsize=11)
+                ax.set_title("Live WPM Trend — Median Pre-filter → EMA", fontsize=13, pad=10)
+                ax.legend(frameon=True, fontsize=9)
+                if weight_note:
+                    ax.text(0.01, 0.01, weight_note, transform=ax.transAxes,
+                            fontsize=7, color="gray", va="bottom")
+                fig.tight_layout()
+                _savefig(fig, "wpm_trend.png")
+
+            # ── 2. Regression Bar Chart ─────────────────────────────
+            visible = {w: c for w, c in regression_count.items() if c > 0}
+            if visible:
+                sorted_items = sorted(visible.items(), key=lambda x: x[1], reverse=True)
+                words_r  = [i[0] for i in sorted_items]
+                counts_r = [i[1] for i in sorted_items]
+                flagged_set = set(flagged_words)
+                colors_r = ["#e74c3c" if w in flagged_set else "#3498db" for w in words_r]
+
+                fig, ax = plt.subplots(figsize=(8, max(3, len(words_r) * 0.4 + 1)))
+                bars = ax.barh(range(len(words_r)), counts_r, color=colors_r, height=0.6)
+                ax.set_yticks(range(len(words_r)))
+                ax.set_yticklabels(words_r, fontsize=9)
+                ax.invert_yaxis()
+                ax.set_xlabel("Regression Count", fontsize=11)
+                ax.set_title("Inter-Word Regressions", fontsize=13, pad=10)
+                # Legend
+                red_patch  = mpatches.Patch(color="#e74c3c",
+                                            label=f"Flagged (>{REGRESSION_FLAG_THRESHOLD} regressions)")
+                blue_patch = mpatches.Patch(color="#3498db", label="Normal")
+                ax.legend(handles=[red_patch, blue_patch], loc="lower right", fontsize=9)
+                # Count labels
+                for bar, cnt in zip(bars, counts_r):
+                    ax.text(bar.get_width() + 0.1, bar.get_y() + bar.get_height() / 2,
+                            str(cnt), va="center", fontsize=8)
+                fig.tight_layout()
+                _savefig(fig, "regression_chart.png")
+
+            # ── 3. Velocity Profile Overlay ─────────────────────────
+            if vel_history:
+                fig, ax = plt.subplots(figsize=(10, 4))
+                for i, v in enumerate(vel_history[:-1]):
+                    if len(v) >= 2:
+                        ax.plot(np.arange(len(v)), v, color="#888888",
+                                linewidth=0.8, alpha=0.2)
+                if len(vel_history[-1]) >= 2:
+                    ax.plot(np.arange(len(vel_history[-1])), vel_history[-1],
+                            color="#1a6fcc", linewidth=2.2, label="Most recent")
+                # Weighted mean
+                try:
+                    from VelocityProfileMonitor import _compute_weighted_mean_velocity
+                except Exception:
+                    pass
+                # Simple unweighted mean as fallback
+                max_len = max(len(v) for v in vel_history)
+                mean_arr = np.zeros(max_len)
+                cnt_arr  = np.zeros(max_len)
+                for v in vel_history:
+                    for i, val in enumerate(v):
+                        mean_arr[i] += val
+                        cnt_arr[i]  += 1
+                cnt_arr = np.where(cnt_arr == 0, 1, cnt_arr)
+                mean_v = mean_arr / cnt_arr
+                ax.plot(np.arange(max_len), mean_v, color="#e67e22",
+                        linewidth=2, linestyle="--", label="Mean velocity")
+                ax.set_xlabel("Step Index", fontsize=11)
+                ax.set_ylabel("Velocity (cells/sec)", fontsize=11)
+                ax.set_title("Velocity Profile — Last 20 Touch Events", fontsize=13, pad=10)
+                ax.legend(fontsize=9)
+                fig.tight_layout()
+                _savefig(fig, "velocity_profile.png")
+
+            # ── 4. Path Efficiency ──────────────────────────────────
+            if len(eff_history) >= 2:
+                fig, ax = plt.subplots(figsize=(10, 4))
+                colors_e = ["#27ae60" if e >= 0.8
+                             else ("#e67e22" if e >= 0.5 else "#e74c3c")
+                             for e in eff_history]
+                ax.scatter(eff_indices, eff_history, c=colors_e, s=40,
+                           zorder=3, edgecolors="white", linewidths=0.5)
+                # Trend line (polyfit fallback)
+                try:
+                    z = np.polyfit(eff_indices, eff_history, 2)
+                    p = np.poly1d(z)
+                    xs = np.linspace(min(eff_indices), max(eff_indices), 200)
+                    ax.plot(xs, p(xs), color="#e67e22", linewidth=2.5, label="Trend")
+                except Exception:
+                    pass
+                ax.axhline(0.8, color="#27ae60", linestyle="--", linewidth=1.5,
+                           label="Proficiency target (η=0.8)")
+                ax.set_ylim(0, 1.05)
+                ax.set_xlabel("Contact # (press→release)", fontsize=11)
+                ax.set_ylabel("Path Efficiency (η)", fontsize=11)
+                ax.set_title("Path Efficiency Over Session", fontsize=13, pad=10)
+                g_patch = mpatches.Patch(color="#27ae60", label="Proficient (η≥0.8)")
+                o_patch = mpatches.Patch(color="#e67e22", label="Developing (0.5≤η<0.8)")
+                r_patch = mpatches.Patch(color="#e74c3c", label="Struggling (η<0.5)")
+                ax.legend(handles=[g_patch, o_patch, r_patch], fontsize=9, loc="lower right")
+                fig.tight_layout()
+                _savefig(fig, "path_efficiency.png")
+
+            # ── 5. Difficulty Heatmap ───────────────────────────────
+            if diff_z is not None:
+                fig, ax = plt.subplots(figsize=(7, 6))
+                # Build display matrix
+                Z_display = np.zeros((GRID, GRID))
+                if hasattr(diff_z, 'filled'):
+                    Z_display = np.array(diff_z.filled(0), dtype=float)
+                else:
+                    Z_display = np.array(diff_z, dtype=float)
+                im = ax.imshow(Z_display, cmap="YlOrRd", aspect="equal",
+                               interpolation="nearest")
+                plt.colorbar(im, ax=ax, shrink=0.8, label="Composite Difficulty Score")
+                # Word labels
+                if wb_snap:
+                    for r in range(GRID):
+                        for entry in wb_snap.get(r, []):
+                            mid_c = (entry["start"] + entry["end"]) / 2
+                            val = Z_display[r, int(round(mid_c))]
+                            ax.text(mid_c, r, entry["word"],
+                                    ha="center", va="center",
+                                    fontsize=7, color="black",
+                                    fontweight="bold")
+                ax.set_xticks(range(GRID))
+                ax.set_yticks(range(GRID))
+                ax.set_xticklabels([f"C{i}" for i in range(GRID)])
+                ax.set_yticklabels([f"R{i}" for i in range(GRID)])
+                ax.set_title("Per-Word Composite Difficulty Heatmap", fontsize=13, pad=10)
+                fig.tight_layout()
+                _savefig(fig, "difficulty_heatmap.png")
+
+        print("[DataLogger] All session figures saved.")
+
+
 # ═══════════════════════════ SETUP ════════════════════════════
 
 print("Opening serial port…")
@@ -3574,6 +3919,9 @@ reg_chart        = RegressionBarChart()       # V-5
 monitor_3d       = Monitor3D()                # V-6
 vel_profile      = VelocityProfileMonitor()    # V-7
 eff_plot         = EfficiencyPlot()             # V-8
+
+data_logger = DataLogger()
+_last_snapshot_log_time = time.time()
 
 # ── Per-finger tracker sets (butterfly dual-finger tracking) ──
 finger_trackers = [
@@ -3758,6 +4106,7 @@ def metrics_thread():
     Single-finger usage: finger 1 stays permanently idle — behavior
     is identical to the original single-finger implementation.
     """
+    global _last_snapshot_log_time
     det_smooth   = np.zeros((GRID, GRID))
     initialized  = False
 
@@ -3832,6 +4181,28 @@ def metrics_thread():
 
         cell_diff.record(f.first_peak_logic, d)
         ft["cell_diff"].record(f.first_peak_logic, d)
+
+        # ── DataLogger: log this touch event ──────────────────────────
+        _r_log = f.first_peak_logic[0] if f.first_peak_logic else -1
+        _c_log = f.first_peak_logic[1] if f.first_peak_logic else -1
+        _vel_mean_log = float(vels.mean()) if len(vels) > 0 else 0.0
+        _is_reg = registered_word in word_stats._seen if registered_word else False
+        _wpm_now = float(perf._wpm_counter.get_wpm())
+        data_logger.log_touch(
+            timestamp=touch_end,
+            word=registered_word or "",
+            row=_r_log, col=_c_log,
+            duration_ms=duration * 1000,
+            vel_mean=_vel_mean_log,
+            reversals=rev,
+            zero_crossings=zc,
+            difficulty=d,
+            is_regression=(registered_word in word_stats._regression_count and
+                           word_stats._regression_count[registered_word] > 0
+                           and registered_word in word_stats._seen),
+            wpm=_wpm_now,
+            path_efficiency=eff,
+        )
 
         # EWIQR + Welford per-word tracking (both per-finger and combined)
         if registered_word:
@@ -4729,6 +5100,27 @@ if _LEGACY_MODE:
                 _cached_skip_snap = compute_skip_stats(_cached_wb_snap, _cached_ws["word_count"])
                 _needs_full_redraw = True   # snapshot data changed → schedule full redraw for text panels
 
+                # ── DataLogger: periodic snapshot every 5 seconds ────────
+                if time.time() - _last_snapshot_log_time >= 5.0:
+                    _last_snapshot_log_time = time.time()
+                    try:
+                        _vt_snap = velocity_tracker.snapshot()
+                        _skip_snap_log = compute_skip_stats(
+                            {k: list(v) for k, v in word_boundaries.items()},
+                            _cached_ws.get("word_count", {}),
+                        )
+                        data_logger.log_snapshot(
+                            timestamp=time.time(),
+                            wpm=perf.snapshot["wpm"],
+                            consistency=_vt_snap["consistency"],
+                            regression_rate=_cached_ws.get("hesitation_rate", 0.0),
+                            skip_rate=_skip_snap_log["skip_rate"],
+                            path_efficiency=eff_plot.get_avg_efficiency(),
+                            composite_difficulty=perf.snapshot["avg_difficulty"],
+                        )
+                    except Exception:
+                        pass
+
             # ── A4: Chart updates — only update the ACTIVE plot ─────────────
             # Skipping all chart work for hidden plots eliminates the biggest
             # source of frame-drop latency in the original design.
@@ -5544,141 +5936,346 @@ else:
                     self._cell_texts[(r, c)].setText(label)
 
 
-    class MetricsPanel(QLabel):
-        """Live metrics display with monospace text."""
+    # ══════════════════════════════════════════════════════════════
+    # METRIC CARD WIDGET
+    # ══════════════════════════════════════════════════════════════
+
+    class MetricCard(QFrame):
+        """A single styled metric display card with label, value, and subtitle."""
+
+        def __init__(self, label: str, accent: str = "#58a6ff", parent=None):
+            super().__init__(parent)
+            self._accent = accent
+            self.setMinimumHeight(80)
+            self.setStyleSheet(f"""
+                MetricCard {{
+                    background: #161b22;
+                    border: 1px solid #21262d;
+                    border-left: 3px solid {accent};
+                    border-radius: 6px;
+                }}
+            """)
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(12, 8, 12, 8)
+            layout.setSpacing(2)
+
+            self._label_widget = QLabel(label.upper())
+            self._label_widget.setStyleSheet(
+                f"color: {accent}; font-size: 8pt; font-weight: bold; "
+                "font-family: 'Segoe UI', sans-serif; letter-spacing: 1px;"
+            )
+
+            self._value_widget = QLabel("—")
+            self._value_widget.setStyleSheet(
+                "color: #e6edf3; font-size: 22pt; font-weight: bold; "
+                "font-family: 'Segoe UI', sans-serif;"
+            )
+
+            self._sub_widget = QLabel("")
+            self._sub_widget.setStyleSheet(
+                "color: #8b949e; font-size: 8pt; font-family: 'Segoe UI', sans-serif;"
+            )
+
+            layout.addWidget(self._label_widget)
+            layout.addWidget(self._value_widget)
+            layout.addWidget(self._sub_widget)
+
+        def set_value(self, value: str, subtitle: str = ""):
+            self._value_widget.setText(value)
+            self._sub_widget.setText(subtitle)
+
+
+    # ══════════════════════════════════════════════════════════════
+    # LIVE STATUS BAR
+    # ══════════════════════════════════════════════════════════════
+
+    class StatusBar(QWidget):
+        """Top header bar: title, live indicator, session timer, COM port."""
 
         def __init__(self, parent=None):
             super().__init__(parent)
-            self.setStyleSheet(f"""
-                QLabel {{
-                    background: {_BG_CARD};
-                    color: {_FG_PRIMARY};
-                    font-family: 'Courier New', monospace;
-                    font-size: 10pt;
-                    padding: 10px;
-                    border: 1px solid {_BG_BORDER};
-                    border-radius: 4px;
-                }}
-            """)
-            self.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-            self.setWordWrap(False)
-            self.setMinimumWidth(320)
-            self.setText("  Loading…")
+            self.setFixedHeight(44)
+            self.setStyleSheet("background: #0d1117; border-bottom: 1px solid #21262d;")
+            layout = QHBoxLayout(self)
+            layout.setContentsMargins(16, 0, 16, 0)
+
+            # Title
+            title = QLabel("BRAILLE PERFORMANCE MONITOR")
+            title.setStyleSheet(
+                "color: #e6edf3; font-size: 11pt; font-weight: bold; "
+                "font-family: 'Segoe UI', sans-serif; letter-spacing: 2px;"
+            )
+
+            # Separator
+            sep = QLabel("│")
+            sep.setStyleSheet("color: #30363d; font-size: 14pt; margin: 0 8px;")
+
+            # Live indicator label
+            self._live_label = QLabel("● LIVE")
+            self._live_label.setStyleSheet(
+                "color: #3fb950; font-size: 9pt; font-weight: bold; "
+                "font-family: 'Segoe UI', sans-serif;"
+            )
+
+            # Timer
+            self._timer_label = QLabel("00:00")
+            self._timer_label.setStyleSheet(
+                "color: #8b949e; font-size: 9pt; font-family: 'Segoe UI Mono', monospace;"
+            )
+
+            # COM port
+            self._port_label = QLabel(f"COM: {PORT}")
+            self._port_label.setStyleSheet(
+                "color: #8b949e; font-size: 9pt; font-family: 'Segoe UI', sans-serif;"
+            )
+
+            # Weight preset info
+            self._preset_label = QLabel(f"Preset: {_WEIGHT_PRESET}")
+            self._preset_label.setStyleSheet(
+                "color: #58a6ff; font-size: 8pt; font-family: 'Segoe UI', sans-serif;"
+            )
+
+            layout.addWidget(title)
+            layout.addWidget(sep)
+            layout.addWidget(self._live_label)
+            layout.addStretch()
+            layout.addWidget(self._preset_label)
+            layout.addSpacing(20)
+            layout.addWidget(self._timer_label)
+            layout.addSpacing(20)
+            layout.addWidget(self._port_label)
+
+            # Pulse timer for the LIVE dot
+            self._pulse = True
+            self._pulse_timer = QTimer()
+            self._pulse_timer.timeout.connect(self._pulse_tick)
+            self._pulse_timer.start(800)
+
+            self._start_time = time.time()
+
+        def _pulse_tick(self):
+            self._pulse = not self._pulse
+            if self._pulse:
+                self._live_label.setStyleSheet(
+                    "color: #3fb950; font-size: 9pt; font-weight: bold; "
+                    "font-family: 'Segoe UI', sans-serif;"
+                )
+            else:
+                self._live_label.setStyleSheet(
+                    "color: #1a3a1a; font-size: 9pt; font-weight: bold; "
+                    "font-family: 'Segoe UI', sans-serif;"
+                )
+
+        def tick(self):
+            elapsed = int(time.time() - self._start_time)
+            m, s = divmod(elapsed, 60)
+            self._timer_label.setText(f"{m:02d}:{s:02d}")
+
+
+    # ══════════════════════════════════════════════════════════════
+    # METRICS PANEL (grid of MetricCards)
+    # ══════════════════════════════════════════════════════════════
+
+    class MetricsPanel(QWidget):
+        """Grid of MetricCards showing live session metrics."""
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setStyleSheet("background: #0d1117;")
+            grid = QGridLayout(self)
+            grid.setContentsMargins(8, 8, 8, 8)
+            grid.setSpacing(8)
+
+            # ── Row 0: Speed ──────────────────────────────
+            self._wpm      = MetricCard("WPM",         "#58a6ff")
+            self._trend    = MetricCard("EMA Trend",   "#58a6ff")
+            self._chars    = MetricCard("Characters",  "#58a6ff")
+            grid.addWidget(self._wpm,   0, 0)
+            grid.addWidget(self._trend, 0, 1)
+            grid.addWidget(self._chars, 0, 2)
+
+            # ── Row 1: Accuracy ───────────────────────────
+            self._eff      = MetricCard("Path Eff.",      "#3fb950")
+            self._reg      = MetricCard("Regressions",    "#3fb950")
+            self._hes      = MetricCard("Hesitation Rate","#3fb950")
+            grid.addWidget(self._eff, 1, 0)
+            grid.addWidget(self._reg, 1, 1)
+            grid.addWidget(self._hes, 1, 2)
+
+            # ── Row 2: Difficulty ─────────────────────────
+            self._diff     = MetricCard("Avg Difficulty", "#f0883e")
+            self._rev      = MetricCard("Reversals",      "#f0883e")
+            self._consist  = MetricCard("Consistency",    "#f0883e")
+            grid.addWidget(self._diff,    2, 0)
+            grid.addWidget(self._rev,     2, 1)
+            grid.addWidget(self._consist, 2, 2)
+
+            # ── Row 3: Current touch status ───────────────
+            self._word_now = MetricCard("Current Word",   "#e6edf3")
+            self._skip     = MetricCard("Skip Rate",      "#f85149")
+            self._touch_ms = MetricCard("Touch Duration", "#8b949e")
+            grid.addWidget(self._word_now, 3, 0)
+            grid.addWidget(self._skip,     3, 1)
+            grid.addWidget(self._touch_ms, 3, 2)
 
         def update_metrics(self, m, ws, vt, ewiqr_snap, diff_snap,
                            eff_avg, wpm_ema, finger_wpms, skip_snap):
-            cw = m.get("current_word", "")
-            cw_str = cw if cw else "—"
-            st_icon = "●" if m["is_touching"] else "○"
-            _wpm = m['wpm']
-            _wpm_dot = "🟢" if _wpm >= 50 else ("🟡" if _wpm >= 20 else "🔴")
-            _eff_dot = "🟢" if eff_avg >= 0.8 else ("🟡" if eff_avg >= 0.5 else "🔴")
-            _diff = m['avg_difficulty']
-            _diff_dot = "🟢" if _diff < 1.0 else ("🟡" if _diff < 2.0 else "🔴")
+            _wpm = m["wpm"]
+            _eff = eff_avg
+            _diff = m["avg_difficulty"]
+            _cons = vt["consistency"]
 
-            if diff_snap:
-                hc = max(diff_snap, key=diff_snap.get)
-                hd = diff_snap[hc]
-                hardest_str = f"({hc[0]},{hc[1]}) D={hd:.2f}"
-            else:
-                hardest_str = "n/a"
+            # WPM color
+            wpm_color = (
+                "#3fb950" if _wpm >= 50 else
+                ("#f0883e" if _wpm >= 20 else "#f85149")
+            )
+            self._wpm.setStyleSheet(self._wpm.styleSheet()  # keep card style
+                .replace(self._wpm._accent, wpm_color))
+            self._wpm._accent = wpm_color
+            self._wpm.set_value(f"{_wpm:.0f}",
+                                f"F0: {finger_wpms[0]:.0f}  F1: {finger_wpms[1]:.0f}")
 
-            top5 = ewiqr_snap.get("top5_hardest", [])
-            hw_line = ""
-            if top5:
-                tw, tiq = top5[0]
-                hw_line = f"\n  Hardest word: {tw} (IQR={tiq:.2f}s)"
+            self._trend.set_value(f"{wpm_ema:.0f}", "EMA smoothed")
+            self._chars.set_value(str(m["chars_total"]),
+                                  f"{m['chars_window']} in window")
 
-            lines = [
-                f"  {st_icon} {cw_str:^18s}  {m['pressed_cells']} cells",
-                "",
-                "  ── SPEED ────────────────────",
-                f"  {_wpm_dot} {_wpm:.0f} WPM  (trend {wpm_ema:.0f})",
-                f"    F0: {finger_wpms[0]:.0f} WPM   F1: {finger_wpms[1]:.0f} WPM",
-                f"    {m['chars_total']} chars  {m['chars_window']} in window",
-                f"    {m['avg_duration']*1000:.0f} ms/touch",
-                "",
-                "  ── ACCURACY ─────────────────",
-                f"  {_eff_dot} Path η={eff_avg:.2f}",
-                f"    Backtracks: {m['total_backtracks']}",
-                f"    Regressions: {ws['total_regressions']}",
-                f"    Hesitation: {ws['hesitation_rate']*100:.0f}%",
-                "",
-                "  ── DIFFICULTY ────────────────",
-                f"  {_diff_dot} Avg D={_diff:.2f}",
-                f"    Reversals: {m['avg_reversals']:.1f}",
-                f"    Word rev: {m['word_reversals_total']}",
-                f"    Hardest: {hardest_str}",
-                "",
-                "  ── VELOCITY ─────────────────",
-                f"    Speed: {vt['mean_vel']:.1f} cells/s",
-                f"    IQR: {vt['iqr']:.2f}  ({vt['n_events']} events)",
-                f"    Consistency: {vt['consistency']:.2f}",
-            ]
-            if hw_line:
-                lines.append(hw_line)
-            self.setText("\n".join(lines))
+            self._eff.set_value(f"{_eff:.2f}",
+                                f"Backtracks: {m['total_backtracks']}")
+            self._reg.set_value(str(ws["total_regressions"]),
+                                f"Flagged: {len(ws['flagged_words'])}")
+            self._hes.set_value(f"{ws['hesitation_rate']*100:.0f}%",
+                                "regression / total touches")
+
+            self._diff.set_value(f"{_diff:.2f}",
+                                 f"Word rev: {m['word_reversals_total']}")
+            self._rev.set_value(f"{m['avg_reversals']:.1f}",
+                                "avg per touch")
+            self._consist.set_value(f"{_cons:.2f}",
+                                    f"IQR: {vt['iqr']:.2f}")
+
+            cw = m.get("current_word", "") or "—"
+            touch_icon = "▶" if m["is_touching"] else "○"
+            self._word_now.set_value(cw,
+                                     f"{touch_icon} {m['pressed_cells']} cells active")
+            self._skip.set_value(f"{skip_snap['skip_rate']:.0f}%",
+                                 f"{len(skip_snap['skipped_words'])} words skipped")
+            self._touch_ms.set_value(f"{m['avg_duration']*1000:.0f} ms",
+                                     f"{vt['mean_vel']:.1f} cells/s")
 
 
-    class WordStatsPanel(QLabel):
-        """Word statistics display with monospace text."""
+    # ══════════════════════════════════════════════════════════════
+    # WORD STATS TABLE
+    # ══════════════════════════════════════════════════════════════
+
+    class WordStatsPanel(QWidget):
+        """Compact scoreboard table showing per-word stats."""
 
         def __init__(self, parent=None):
             super().__init__(parent)
-            self.setStyleSheet(f"""
-                QLabel {{
-                    background: {_BG_CARD};
-                    color: {_FG_PRIMARY};
-                    font-family: 'Courier New', monospace;
-                    font-size: 9.5pt;
-                    padding: 10px;
-                    border: 1px solid {_BG_BORDER};
+            self.setStyleSheet("background: #0d1117;")
+            layout = QVBoxLayout(self)
+            layout.setContentsMargins(8, 8, 8, 8)
+            layout.setSpacing(6)
+
+            hdr = QLabel("WORD SCOREBOARD")
+            hdr.setStyleSheet(
+                "color: #58a6ff; font-size: 9pt; font-weight: bold; "
+                "font-family: 'Segoe UI', sans-serif; letter-spacing: 1px;"
+            )
+            layout.addWidget(hdr)
+
+            from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+            self._table = QTableWidget(0, 4)
+            self._table.setHorizontalHeaderLabels(["Word", "Touches", "Regress.", "Status"])
+            self._table.setStyleSheet(f"""
+                QTableWidget {{
+                    background: #161b22;
+                    color: #e6edf3;
+                    font-family: 'Segoe UI', sans-serif;
+                    font-size: 9pt;
+                    border: 1px solid #21262d;
                     border-radius: 4px;
+                    gridline-color: #21262d;
+                }}
+                QHeaderView::section {{
+                    background: #0d1117;
+                    color: #8b949e;
+                    border: none;
+                    border-bottom: 1px solid #30363d;
+                    font-size: 8pt;
+                    font-weight: bold;
+                    padding: 4px 8px;
+                    letter-spacing: 1px;
+                }}
+                QTableWidget::item {{
+                    padding: 4px 8px;
+                    border-bottom: 1px solid #21262d;
+                }}
+                QTableWidget::item:selected {{
+                    background: #21262d;
                 }}
             """)
-            self.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-            self.setWordWrap(False)
-            self.setMinimumWidth(300)
-            self.setText("  Loading…")
+            self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+            self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+            self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+            self._table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+            self._table.verticalHeader().setVisible(False)
+            self._table.setSelectionMode(QTableWidget.NoSelection)
+            self._table.setEditTriggers(QTableWidget.NoEditTriggers)
+            layout.addWidget(self._table, 1)
+
+            # Sequence strip
+            seq_hdr = QLabel("RECENT SEQUENCE")
+            seq_hdr.setStyleSheet(
+                "color: #8b949e; font-size: 8pt; font-weight: bold; "
+                "font-family: 'Segoe UI', sans-serif; letter-spacing: 1px; margin-top: 4px;"
+            )
+            self._seq_label = QLabel("—")
+            self._seq_label.setStyleSheet(
+                "color: #e6edf3; font-size: 9pt; font-family: 'Segoe UI', sans-serif;"
+            )
+            self._seq_label.setWordWrap(True)
+            layout.addWidget(seq_hdr)
+            layout.addWidget(self._seq_label)
 
         def update_stats(self, ws, skip_snap):
-            wc = ws["word_count"]
-            top_words = sorted(wc.items(), key=lambda x: x[1], reverse=True)[:5]
-            seq_display = " → ".join(ws["touch_sequence"][-5:]) \
+            wc   = ws["word_count"]
+            rc   = ws.get("regression_count", {})
+            # rc may not be directly in snapshot; rebuild from top_regressed
+            reg_dict = dict(ws.get("top_regressed", []))
+            flagged  = set(ws["flagged_words"])
+
+            # Sort by touches descending
+            sorted_words = sorted(wc.items(), key=lambda x: x[1], reverse=True)
+
+            self._table.setRowCount(len(sorted_words))
+            for i, (word, touches) in enumerate(sorted_words):
+                regressions = reg_dict.get(word, 0)
+                if word in flagged:
+                    status, status_color = "FLAGGED", "#f85149"
+                    row_bg = QColor("#2d0a0a")
+                elif regressions > 0:
+                    status, status_color = "Regression", "#f0883e"
+                    row_bg = QColor("#2d1a00")
+                else:
+                    status, status_color = "OK", "#3fb950"
+                    row_bg = QColor("#161b22")
+
+                for col_idx, text in enumerate([word, str(touches), str(regressions), status]):
+                    item = QTableWidgetItem(text)
+                    item.setForeground(QColor(status_color if col_idx == 3 else "#e6edf3"))
+                    item.setBackground(row_bg)
+                    self._table.setItem(i, col_idx, item)
+
+            seq_display = " → ".join(ws["touch_sequence"][-7:]) \
                           if ws["touch_sequence"] else "—"
-            flagged = ws["flagged_words"]
-            flagged_str = (", ".join(flagged[:3]) if flagged else "none")
+            self._seq_label.setText(seq_display)
 
-            lines = [
-                "  ┌─ WORDS ────────────────────┐",
-                f"  │  Touches: {ws['total_registered']}",
-                f"  │  Most: {ws['most_touched'] or '—'}",
-                f"  │  Hardest: {ws['hardest_word'] or '—'}",
-                "  └────────────────────────────┘",
-                "",
-                "  ┌─ TOP WORDS ────────────────┐",
-            ]
-            for w, n in top_words:
-                lines.append(f"  │  {w:<10s} {n}")
-            if not top_words:
-                lines.append("  │  (no touches yet)")
-            lines += [
-                "  └────────────────────────────┘",
-                "",
-                "  ┌─ REGRESSIONS ──────────────┐",
-                f"  │  Total: {ws['total_regressions']}",
-                f"  │  Flagged: {flagged_str}",
-                "  └────────────────────────────┘",
-                "",
-                "  ┌─ COVERAGE ────────────────┐",
-                f"  │  Skip rate: {skip_snap['skip_rate']:.0f}%",
-                f"  │  Missing: {len(skip_snap['skipped_words'])}/{skip_snap.get('total_words', GRID*GRID)}",
-                "  └────────────────────────────┘",
-                "",
-                f"  Seq: {seq_display[:28]}",
-            ]
-            self.setText("\n".join(lines))
 
+    # ══════════════════════════════════════════════════════════════
+    # PLOT PANEL (unchanged widget classes, kept internal)
+    # ══════════════════════════════════════════════════════════════
 
     class BarChartWidget(pg.PlotWidget):
         """Per-word dual bar chart using pyqtgraph."""
@@ -5686,25 +6283,18 @@ else:
         def __init__(self, parent=None):
             super().__init__(parent, background="#0d1117")
             self.setTitle("Per-Word Performance (Time-on-Task & Touch Counts)",
-                          color="w", size="11pt")
-            self.setLabel('left', "Time-on-Task (s)", color=_FG_PRIMARY)
-            self.setLabel('bottom', "Word", color=_FG_MUTED)
-            self.showGrid(y=True, alpha=0.3)
+                          color="#e6edf3", size="10pt")
+            self.setLabel('left', "Time-on-Task (s)", color="#8b949e")
+            self.setLabel('bottom', "Word", color="#8b949e")
+            self.showGrid(y=True, alpha=0.2)
             self._last_update = 0
-            self._bar_items_tot = None
-            self._bar_items_cnt = None
-            self._hline = None
             self._word_list = []
-            self._inited = False
 
-            # ── Ensure bottom-axis word labels are always visible ──
             bottom_ax = self.getAxis('bottom')
-            _tick_font = QFont("Courier New", 7)
-            bottom_ax.setTickFont(_tick_font)
-            bottom_ax.setTextPen(pg.mkPen(_FG_MUTED))
+            bottom_ax.setTickFont(QFont("Segoe UI", 7))
+            bottom_ax.setTextPen(pg.mkPen("#8b949e"))
             bottom_ax.setStyle(tickTextOffset=6, autoExpandTextSpace=True,
                                autoReduceTextSpace=False)
-            # Reserve extra space at the bottom for word labels
             bottom_ax.setHeight(50)
 
         def update_chart(self, welford_snap, word_count, ewiqr_snap, wb_snap):
@@ -5713,7 +6303,6 @@ else:
                 return
             self._last_update = now
 
-            # Build word list in row-major order
             word_list = []
             word_rows = []
             for ri in range(GRID):
@@ -5729,7 +6318,6 @@ else:
             tot_vals = np.array([welford_snap.get(w, {}).get("mean", 0.0) for w in word_list])
             cnt_vals = np.array([word_count.get(w, 0) for w in word_list], dtype=float)
 
-            # Normalize count to same scale as tot for overlay
             cnt_max = max(cnt_vals.max(), 1)
             tot_max = max(tot_vals.max(), 0.1)
             cnt_scaled = cnt_vals / cnt_max * tot_max if cnt_max > 0 else cnt_vals
@@ -5740,32 +6328,24 @@ else:
 
             self.clear()
 
-            # Primary bars (Time-on-Task)
             bw = 0.35
-            bg_tot = pg.BarGraphItem(x=x - bw/2, height=tot_vals, width=bw,
-                                      brushes=colors_tot)
+            bg_tot = pg.BarGraphItem(x=x - bw/2, height=tot_vals, width=bw, brushes=colors_tot)
             self.addItem(bg_tot)
-
-            # Count bars (semi-transparent)
-            bg_cnt = pg.BarGraphItem(x=x + bw/2, height=cnt_scaled, width=bw,
-                                      brushes=colors_cnt)
+            bg_cnt = pg.BarGraphItem(x=x + bw/2, height=cnt_scaled, width=bw, brushes=colors_cnt)
             self.addItem(bg_cnt)
 
-            # Session average line
             if welford_snap:
                 total_n = sum(v.get("n", 0) for v in welford_snap.values())
                 if total_n > 0:
                     session_avg = sum(v.get("mean", 0) * v.get("n", 0)
                                       for v in welford_snap.values()) / total_n
-                    self.addLine(y=session_avg, pen=pg.mkPen("#00ffaa", style=Qt.DashLine, width=1.5))
+                    self.addLine(y=session_avg,
+                                 pen=pg.mkPen("#3fb950", style=Qt.DashLine, width=1.5))
 
-            # X-axis word labels — force every word to appear as a tick
             ax = self.getAxis('bottom')
             ax.setTicks([[(i, w) for i, w in enumerate(word_list)]])
-            # Re-apply font & pen after clear() to guarantee visibility
-            _tick_font = QFont("Courier New", 7)
-            ax.setTickFont(_tick_font)
-            ax.setTextPen(pg.mkPen(_FG_MUTED))
+            ax.setTickFont(QFont("Segoe UI", 7))
+            ax.setTextPen(pg.mkPen("#8b949e"))
             self._word_list = word_list
 
 
@@ -5774,33 +6354,23 @@ else:
 
         def __init__(self, parent=None):
             super().__init__(parent, background="#0d1117")
-            self.setTitle("Live WPM Trend (Median Pre-filter → EMA)",
-                          color="w", size="11pt")
-            self.setLabel('left', "Words Per Minute", color=_FG_MUTED)
-            self.setLabel('bottom', "Session Time (s)", color=_FG_MUTED)
-            self.showGrid(y=True, alpha=0.3)
-
-            # Legend must be added before plot items for pyqtgraph
+            self.setTitle("Live WPM Trend", color="#e6edf3", size="10pt")
+            self.setLabel('left', "Words Per Minute", color="#8b949e")
+            self.setLabel('bottom', "Session Time (s)", color="#8b949e")
+            self.showGrid(y=True, alpha=0.2)
             self.addLegend(offset=(10, 10))
-
             self._line_raw = self.plot([], [], pen=pg.mkPen("#334466", width=1), name="Raw WPM")
-            self._line_ema = self.plot([], [], pen=pg.mkPen("#00ffaa", width=2.5), name="EMA Trend")
-
-            # Reference lines with text annotations
-            self.addLine(y=50, pen=pg.mkPen("#ffaa00", style=Qt.DashLine, width=0.9))
-            _lbl_50 = pg.TextItem("50 WPM (beginner)", color="#ffaa00", anchor=(1.0, 1.0))
-            _lbl_50.setFont(QFont("sans-serif", 7))
-            _lbl_50.setPos(10, 50)
-            self.addItem(_lbl_50)
-            self._lbl_50 = _lbl_50
-
-            self.addLine(y=100, pen=pg.mkPen("#00aaff", style=Qt.DashLine, width=0.9))
-            _lbl_100 = pg.TextItem("100 WPM (intermediate)", color="#00aaff", anchor=(1.0, 1.0))
-            _lbl_100.setFont(QFont("sans-serif", 7))
-            _lbl_100.setPos(10, 100)
-            self.addItem(_lbl_100)
-            self._lbl_100 = _lbl_100
-
+            self._line_ema = self.plot([], [], pen=pg.mkPen("#58a6ff", width=2.5), name="EMA Trend")
+            self.addLine(y=50,  pen=pg.mkPen("#f0883e", style=Qt.DashLine, width=0.9))
+            self.addLine(y=100, pen=pg.mkPen("#3fb950", style=Qt.DashLine, width=0.9))
+            self._lbl_50 = pg.TextItem("50 WPM", color="#f0883e", anchor=(1.0, 1.0))
+            self._lbl_50.setFont(QFont("Segoe UI", 7))
+            self._lbl_50.setPos(10, 50)
+            self.addItem(self._lbl_50)
+            self._lbl_100 = pg.TextItem("100 WPM", color="#3fb950", anchor=(1.0, 1.0))
+            self._lbl_100.setFont(QFont("Segoe UI", 7))
+            self._lbl_100.setPos(10, 100)
+            self.addItem(self._lbl_100)
             self._last_update = 0
 
         def update_trend(self, x_raw, y_raw, y_ema, y_max):
@@ -5808,7 +6378,6 @@ else:
             if now - self._last_update < 0.5:
                 return
             self._last_update = now
-
             if not x_raw:
                 return
             self._line_raw.setData(x_raw, y_raw)
@@ -5816,7 +6385,6 @@ else:
             self.setYRange(0, max(10, y_max))
             x_end = max(x_raw[-1], 10)
             self.setXRange(x_raw[0], x_end)
-            # Keep reference labels pinned to right edge
             self._lbl_50.setPos(x_end, 50)
             self._lbl_100.setPos(x_end, 100)
 
@@ -5826,16 +6394,25 @@ else:
 
         def __init__(self, parent=None):
             super().__init__(parent, background="#0d1117")
-            self.setTitle("Most-Regressed Words (inter-word regressions)",
-                          color="w", size="11pt")
-            self.setLabel('bottom', "Regression count", color=_FG_MUTED)
-            self.showGrid(x=True, alpha=0.3)
+            self.setTitle("Most-Regressed Words", color="#e6edf3", size="10pt")
+            self.setLabel('bottom', "Regression count", color="#8b949e")
+            self.showGrid(x=True, alpha=0.2)
             self._last_update = 0
-            self._empty_text = pg.TextItem("No regressions recorded yet",
-                                            color="#666666", anchor=(0.5, 0.5))
-            self._empty_text.setFont(QFont("sans-serif", 12))
+            self._empty_text = pg.TextItem("No regressions yet", color="#444444", anchor=(0.5, 0.5))
+            self._empty_text.setFont(QFont("Segoe UI", 11))
             self.addItem(self._empty_text)
             self._empty_text.setPos(5, 0)
+
+            # Legend note
+            self._legend_red  = pg.TextItem(
+                f"● Red = flagged (>{REGRESSION_FLAG_THRESHOLD}x)",
+                color="#f85149", anchor=(0.0, 0.0))
+            self._legend_red.setFont(QFont("Segoe UI", 7))
+            self._legend_blue = pg.TextItem("● Blue = normal",
+                color="#58a6ff", anchor=(0.0, 0.0))
+            self._legend_blue.setFont(QFont("Segoe UI", 7))
+            self.addItem(self._legend_red)
+            self.addItem(self._legend_blue)
 
         def update_regressions(self, regression_count, flagged_words):
             now = time.time()
@@ -5847,26 +6424,32 @@ else:
             sorted_items = sorted(visible.items(), key=lambda x: x[1], reverse=True)
 
             self.clear()
+            self._legend_red  = pg.TextItem(
+                f"● Red = flagged (>{REGRESSION_FLAG_THRESHOLD}x)",
+                color="#f85149", anchor=(0.0, 0.0))
+            self._legend_red.setFont(QFont("Segoe UI", 7))
+            self._legend_blue = pg.TextItem("● Blue = normal",
+                color="#58a6ff", anchor=(0.0, 0.0))
+            self._legend_blue.setFont(QFont("Segoe UI", 7))
 
             if not sorted_items:
-                self._empty_text = pg.TextItem("No regressions recorded yet",
-                                                color="#666666", anchor=(0.5, 0.5))
-                self._empty_text.setFont(QFont("sans-serif", 12))
+                self._empty_text = pg.TextItem("No regressions yet",
+                                               color="#444444", anchor=(0.5, 0.5))
+                self._empty_text.setFont(QFont("Segoe UI", 11))
                 self.addItem(self._empty_text)
                 self._empty_text.setPos(5, 0)
+                self.addItem(self._legend_red)
+                self.addItem(self._legend_blue)
                 return
 
             words = [item[0] for item in sorted_items]
             counts = [item[1] for item in sorted_items]
             flagged_set = set(flagged_words)
-            n = len(words)
-            y_pos = np.arange(n)
+            y_pos = np.arange(len(words))
+            colors = [pg.mkColor("#f85149") if w in flagged_set
+                      else pg.mkColor("#58a6ff") for w in words]
 
-            colors = [pg.mkColor("#ff4444") if w in flagged_set else pg.mkColor("#4488ff")
-                      for w in words]
-
-            bg = pg.BarGraphItem(x0=0, y=y_pos, height=0.6,
-                                  width=counts, brushes=colors)
+            bg = pg.BarGraphItem(x0=0, y=y_pos, height=0.6, width=counts, brushes=colors)
             self.addItem(bg)
 
             ax = self.getAxis('left')
@@ -5874,12 +6457,17 @@ else:
             self.invertY(True)
             self.setXRange(0, max(1, max(counts) * 1.15))
 
-            # Add count labels
             for i, c in enumerate(counts):
-                txt = pg.TextItem(str(c), color="w", anchor=(0, 0.5))
-                txt.setFont(QFont("Courier New", 9, QFont.Bold))
-                txt.setPos(c + 0.2, i)
+                txt = pg.TextItem(str(c), color="#e6edf3", anchor=(0, 0.5))
+                txt.setFont(QFont("Segoe UI", 9, QFont.Bold))
+                txt.setPos(c + 0.1, i)
                 self.addItem(txt)
+
+            self.addItem(self._legend_red)
+            self.addItem(self._legend_blue)
+            n = len(words)
+            self._legend_red.setPos(0, -1.2 if n > 0 else 0)
+            self._legend_blue.setPos(max(counts) * 0.4, -1.2 if n > 0 else 0)
 
 
     class PerfHeatmapWidget(pg.GraphicsLayoutWidget):
@@ -5891,35 +6479,31 @@ else:
             self._mode = 'tot'
             self._last_update = 0
 
-            self._plot = self.addPlot(title="Performance Heatmap [V-6]")
+            self._plot = self.addPlot(title="Performance Heatmap")
             self._plot.invertY(True)
             self._plot.setRange(xRange=[-0.5, GRID - 0.5], yRange=[-0.5, GRID - 0.5])
             self._plot.setAspectLocked(True)
 
             self._img = pg.ImageItem()
-            # YlOrRd-like LUT
             ylrd_lut = self._build_ylrd_lut()
             self._img.setLookupTable(ylrd_lut)
             self._plot.addItem(self._img)
 
-            # Cell text annotations
             self._texts = {}
             for r in range(GRID):
                 for c in range(GRID):
                     word = get_word_from_touch(r, c) or "?"
-                    txt = pg.TextItem(f"{word}\n—", color="w", anchor=(0.5, 0.5))
-                    txt.setFont(QFont("Courier New", 7, QFont.Bold))
+                    txt = pg.TextItem(f"{word}\n—", color="#111111", anchor=(0.5, 0.5))
+                    txt.setFont(QFont("Segoe UI", 7, QFont.Bold))
                     txt.setPos(c, r)
                     self._plot.addItem(txt)
                     self._texts[(r, c)] = txt
 
-            # Grid lines
             for i in range(GRID + 1):
                 pos = i - 0.5
                 self._plot.addLine(x=pos, pen=pg.mkPen("#21262d", width=1))
                 self._plot.addLine(y=pos, pen=pg.mkPen("#21262d", width=1))
 
-            # Axes ticks
             x_ticks = [(i, f"C{i}") for i in range(GRID)]
             y_ticks = [(i, f"R{i}") for i in range(GRID)]
             self._plot.getAxis('bottom').setTicks([x_ticks])
@@ -5950,16 +6534,13 @@ else:
             if now - self._last_update < 0.5:
                 return
             self._last_update = now
-
             Z = Z_tot if self._mode == 'tot' else Z_diff
             z_max = float(Z.max()) if Z.max() > 0 else 1.0
             normalized = np.clip(Z / z_max * 255, 0, 255).astype(np.ubyte)
             self._img.setImage(normalized.T, levels=[0, 255])
             self._img.setRect(-0.5, -0.5, GRID, GRID)
-
             mode_label = "Time-on-Task" if self._mode == 'tot' else "EWIQR Difficulty"
-            self._plot.setTitle(f"Performance Heatmap — {mode_label} [V-6]")
-
+            self._plot.setTitle(f"Performance Heatmap — {mode_label}")
             for r in range(GRID):
                 for c in range(GRID):
                     word = get_word_from_touch(r, c) or "?"
@@ -5973,18 +6554,17 @@ else:
 
         def __init__(self, parent=None):
             super().__init__(parent, background="#0d1117")
-            self.setTitle("Velocity Profile — last 20 touches [V-7]",
-                          color="w", size="11pt")
-            self.setLabel('left', "Velocity (cells/sec)", color=_FG_MUTED)
-            self.setLabel('bottom', "Step index", color=_FG_MUTED)
-            self.showGrid(y=True, alpha=0.3)
-            self.addLine(y=0, pen=pg.mkPen("w", width=0.5, style=Qt.SolidLine))
+            self.setTitle("Velocity Profile — last 20 touches",
+                          color="#e6edf3", size="10pt")
+            self.setLabel('left', "Velocity (cells/sec)", color="#8b949e")
+            self.setLabel('bottom', "Step index", color="#8b949e")
+            self.showGrid(y=True, alpha=0.2)
+            self.addLine(y=0, pen=pg.mkPen("#30363d", width=0.5))
             self._lines_past = []
-            # Legend must be added before plot items for pyqtgraph
             self.addLegend(offset=(10, 10))
-            self._line_recent = self.plot([], [], pen=pg.mkPen("#1f77b4", width=2.5),
-                                           name="Most recent")
-            self._line_mean = self.plot([], [], pen=pg.mkPen("#ff7f0e", width=2,
+            self._line_recent = self.plot([], [], pen=pg.mkPen("#58a6ff", width=2.5),
+                                          name="Most recent")
+            self._line_mean = self.plot([], [], pen=pg.mkPen("#f0883e", width=2,
                                              style=Qt.DashLine), name="Weighted mean")
             self._last_update = 0
 
@@ -5993,43 +6573,31 @@ else:
             if now - self._last_update < 0.2:
                 return
             self._last_update = now
-
             vels = vel_history_snapshot
             if not vels:
                 return
-
-            # Remove old past lines
             for line in self._lines_past:
                 self.removeItem(line)
             self._lines_past = []
-
             N = len(vels)
-
-            # Past events (gray)
             for i in range(N - 1):
                 v = vels[i]
                 if len(v) >= 2:
                     x = np.arange(len(v))
-                    line = self.plot(x, v, pen=pg.mkPen("#888888", width=0.8))
-                    line.setOpacity(0.15)
+                    line = self.plot(x, v, pen=pg.mkPen("#444444", width=0.8))
+                    line.setOpacity(0.2)
                     self._lines_past.append(line)
-
-            # Most recent (bold blue)
             v_recent = vels[-1]
             if len(v_recent) >= 2:
                 self._line_recent.setData(np.arange(len(v_recent)), v_recent)
             else:
                 self._line_recent.setData([], [])
-
-            # Weighted mean
             mean_vel, _ = VelocityProfileMonitor._compute_weighted_mean_velocity(
                 vels, alpha_weight)
             if mean_vel is not None:
                 self._line_mean.setData(np.arange(len(mean_vel)), mean_vel)
             else:
                 self._line_mean.setData([], [])
-
-            # Auto-scale
             all_vals = []
             for va in vels:
                 if len(va) >= 2:
@@ -6045,60 +6613,45 @@ else:
 
         def __init__(self, parent=None):
             super().__init__(parent, background="#0d1117")
-            self.setTitle("Path Efficiency Over Session [V-8]",
-                          color="w", size="11pt")
-            self.setLabel('left', "Path efficiency (η)", color=_FG_MUTED)
-            self.setLabel('bottom', "Contact # (press→release)", color=_FG_MUTED)
-            self.showGrid(y=True, alpha=0.3)
+            self.setTitle("Path Efficiency Over Session", color="#e6edf3", size="10pt")
+            self.setLabel('left', "Path efficiency (η)", color="#8b949e")
+            self.setLabel('bottom', "Contact # (press→release)", color="#8b949e")
+            self.showGrid(y=True, alpha=0.2)
             self.setYRange(0, 1.05)
             self.setXRange(0, 10)
-
-            # Reference line at η=0.8
-            self.addLine(y=0.8, pen=pg.mkPen("#2ca02c", width=1.5, style=Qt.DashLine))
-
-            # Tier bands
+            self.addLine(y=0.8, pen=pg.mkPen("#3fb950", width=1.5, style=Qt.DashLine))
             from pyqtgraph import LinearRegionItem
             band_g = LinearRegionItem([0.8, 1.05], orientation='horizontal',
-                                       brush=pg.mkBrush(44, 160, 44, 15), movable=False)
-            band_o = LinearRegionItem([0.5, 0.8], orientation='horizontal',
-                                       brush=pg.mkBrush(255, 127, 14, 15), movable=False)
-            band_r = LinearRegionItem([0.0, 0.5], orientation='horizontal',
-                                       brush=pg.mkBrush(214, 39, 40, 15), movable=False)
+                                       brush=pg.mkBrush(63, 185, 80, 15), movable=False)
+            band_o = LinearRegionItem([0.5, 0.8],  orientation='horizontal',
+                                       brush=pg.mkBrush(240, 136, 62, 15), movable=False)
+            band_r = LinearRegionItem([0.0, 0.5],  orientation='horizontal',
+                                       brush=pg.mkBrush(248, 81, 73, 15), movable=False)
             for b in (band_g, band_o, band_r):
                 b.setZValue(-10)
                 self.addItem(b)
-
-            # Tier text labels (right edge)
-            _lbl_prof = pg.TextItem("Proficient", color="#2ca02c", anchor=(1.0, 0.5))
-            _lbl_prof.setFont(QFont("sans-serif", 7))
-            _lbl_prof.setPos(10, 0.90)
-            self.addItem(_lbl_prof)
-            self._lbl_prof = _lbl_prof
-
-            _lbl_dev = pg.TextItem("Developing", color="#ff7f0e", anchor=(1.0, 0.5))
-            _lbl_dev.setFont(QFont("sans-serif", 7))
-            _lbl_dev.setPos(10, 0.65)
-            self.addItem(_lbl_dev)
-            self._lbl_dev = _lbl_dev
-
-            _lbl_str = pg.TextItem("Struggling", color="#d62728", anchor=(1.0, 0.5))
-            _lbl_str.setFont(QFont("sans-serif", 7))
-            _lbl_str.setPos(10, 0.25)
-            self.addItem(_lbl_str)
-            self._lbl_str = _lbl_str
-
-            # Legend must be added before plot items for pyqtgraph
+            _lbl_p = pg.TextItem("Proficient",  color="#3fb950", anchor=(1.0, 0.5))
+            _lbl_p.setFont(QFont("Segoe UI", 7))
+            _lbl_p.setPos(10, 0.90)
+            self.addItem(_lbl_p)
+            self._lbl_p = _lbl_p
+            _lbl_d = pg.TextItem("Developing", color="#f0883e", anchor=(1.0, 0.5))
+            _lbl_d.setFont(QFont("Segoe UI", 7))
+            _lbl_d.setPos(10, 0.65)
+            self.addItem(_lbl_d)
+            self._lbl_d = _lbl_d
+            _lbl_s = pg.TextItem("Struggling", color="#f85149", anchor=(1.0, 0.5))
+            _lbl_s.setFont(QFont("Segoe UI", 7))
+            _lbl_s.setPos(10, 0.25)
+            self.addItem(_lbl_s)
+            self._lbl_s = _lbl_s
             self.addLegend(offset=(10, 10))
-
-            self._scatter = pg.ScatterPlotItem(size=8, pen=pg.mkPen("w", width=0.3))
+            self._scatter = pg.ScatterPlotItem(size=8, pen=pg.mkPen("#30363d", width=0.5))
             self.addItem(self._scatter)
-            self._conn_line = self.plot([], [], pen=pg.mkPen("#66aaff", width=1.2),
-                                        name="Path")
-            self._conn_line.setOpacity(0.5)
-            self._trend_line = self.plot([], [], pen=pg.mkPen("#ff7f0e", width=3),
-                                         name="Trend (LOWESS)")
-            # Proficiency target proxy for legend
-            self.plot([], [], pen=pg.mkPen("#2ca02c", width=1.5, style=Qt.DashLine),
+            self._conn_line = self.plot([], [], pen=pg.mkPen("#58a6ff", width=1.2), name="Path")
+            self._conn_line.setOpacity(0.4)
+            self._trend_line = self.plot([], [], pen=pg.mkPen("#f0883e", width=3), name="Trend")
+            self.plot([], [], pen=pg.mkPen("#3fb950", width=1.5, style=Qt.DashLine),
                       name="Proficiency target (η=0.8)")
             self._last_update = 0
 
@@ -6107,39 +6660,34 @@ else:
             if now - self._last_update < 0.5:
                 return
             self._last_update = now
-
             if len(eff_hist) < 2:
                 return
-
-            # Color-code points
             colors = []
             for eta in eff_hist:
                 if eta >= 0.8:
-                    colors.append(pg.mkBrush("#2ca02c"))
+                    colors.append(pg.mkBrush("#3fb950"))
                 elif eta >= 0.5:
-                    colors.append(pg.mkBrush("#ff7f0e"))
+                    colors.append(pg.mkBrush("#f0883e"))
                 else:
-                    colors.append(pg.mkBrush("#d62728"))
-
+                    colors.append(pg.mkBrush("#f85149"))
             spots = [{'pos': (x, y), 'brush': b}
                      for x, y, b in zip(evt_idx, eff_hist, colors)]
             self._scatter.setData(spots)
             self._conn_line.setData(evt_idx, eff_hist)
-
             if cached_trend_y is not None and len(cached_trend_y) > 0:
                 self._trend_line.setData(cached_trend_x, cached_trend_y)
-
             if evt_idx:
                 x_end = max(evt_idx) + 5
                 self.setXRange(0, x_end)
-                # Keep tier labels pinned to right edge
-                self._lbl_prof.setPos(x_end - 1, 0.90)
-                self._lbl_dev.setPos(x_end - 1, 0.65)
-                self._lbl_str.setPos(x_end - 1, 0.25)
+                self._lbl_p.setPos(x_end - 1, 0.90)
+                self._lbl_d.setPos(x_end - 1, 0.65)
+                self._lbl_s.setPos(x_end - 1, 0.25)
 
+
+    # ── Plot selector panel ──────────────────────────────────────
 
     class PlotPanel(QWidget):
-        """Switchable plot panel with list selector and stacked plots."""
+        """Switchable plot panel with sidebar selector and stacked plots."""
 
         PLOT_LABELS = [
             "Per-Word Bars",
@@ -6152,63 +6700,85 @@ else:
 
         def __init__(self, parent=None):
             super().__init__(parent)
-            self.setStyleSheet(f"background: {_BG_DARK};")
+            self.setStyleSheet("background: #0d1117;")
             layout = QHBoxLayout(self)
             layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
 
-            # Plot selector list
-            self._list = QListWidget()
-            self._list.setMaximumWidth(140)
-            self._list.setStyleSheet(f"""
-                QListWidget {{
-                    background: {_BG_CARD};
-                    color: #c9d1d9;
-                    font-family: monospace;
-                    font-size: 9pt;
-                    border: 1px solid {_BG_BORDER};
-                    outline: none;
-                }}
-                QListWidget::item {{
-                    padding: 8px 6px;
-                    border-bottom: 1px solid {_BG_BORDER};
-                }}
-                QListWidget::item:selected {{
-                    background: #21262d;
-                    color: {_ACCENT_BLUE};
-                }}
-            """)
-            for label in self.PLOT_LABELS:
-                self._list.addItem(QListWidgetItem(label))
-            self._list.setCurrentRow(0)
-            self._list.currentRowChanged.connect(self._on_select)
-            layout.addWidget(self._list)
+            # Sidebar
+            sidebar = QWidget()
+            sidebar.setFixedWidth(120)
+            sidebar.setStyleSheet("background: #161b22; border-right: 1px solid #21262d;")
+            sb_layout = QVBoxLayout(sidebar)
+            sb_layout.setContentsMargins(0, 8, 0, 8)
+            sb_layout.setSpacing(0)
 
-            # Stacked widget for plots
+            sidebar_lbl = QLabel("CHARTS")
+            sidebar_lbl.setStyleSheet(
+                "color: #8b949e; font-size: 7pt; font-weight: bold; "
+                "font-family: 'Segoe UI'; letter-spacing: 2px; padding: 4px 12px;"
+            )
+            sb_layout.addWidget(sidebar_lbl)
+
+            self._buttons = []
+            for i, label in enumerate(self.PLOT_LABELS):
+                btn = QPushButton(label)
+                btn.setCheckable(True)
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background: transparent;
+                        color: #8b949e;
+                        border: none;
+                        text-align: left;
+                        padding: 10px 14px;
+                        font-family: 'Segoe UI';
+                        font-size: 9pt;
+                    }
+                    QPushButton:checked {
+                        background: #21262d;
+                        color: #58a6ff;
+                        border-left: 3px solid #58a6ff;
+                    }
+                    QPushButton:hover:!checked {
+                        background: #1a1f26;
+                        color: #c9d1d9;
+                    }
+                """)
+                btn.setCursor(Qt.PointingHandCursor)
+                btn.clicked.connect(lambda checked, idx=i: self._on_select(idx))
+                sb_layout.addWidget(btn)
+                self._buttons.append(btn)
+
+            sb_layout.addStretch()
+            layout.addWidget(sidebar)
+
+            # Stacked widget
             self._stack = QStackedWidget()
-            self._stack.setStyleSheet(f"background: {_BG_DARK};")
+            self._stack.setStyleSheet("background: #0d1117;")
 
-            self.bar_chart = BarChartWidget()
-            self.wpm_trend = WPMTrendWidget()
-            self.regression = RegressionChartWidget()
+            self.bar_chart   = BarChartWidget()
+            self.wpm_trend   = WPMTrendWidget()
+            self.regression  = RegressionChartWidget()
             self.perf_heatmap = PerfHeatmapWidget()
-            self.velocity = VelocityProfileWidget()
-            self.efficiency = EfficiencyWidget()
+            self.velocity    = VelocityProfileWidget()
+            self.efficiency  = EfficiencyWidget()
 
-            # Mode toggle for perf heatmap
+            # Performance heatmap with mode toggle
             perf_container = QWidget()
             perf_layout = QVBoxLayout(perf_container)
-            perf_layout.setContentsMargins(0, 0, 0, 0)
+            perf_layout.setContentsMargins(0, 4, 0, 0)
             mode_bar = QHBoxLayout()
-            self._btn_tot = QPushButton("Time-on-Task")
+            self._btn_tot  = QPushButton("Time-on-Task")
             self._btn_diff = QPushButton("EWIQR Difficulty")
             for btn in (self._btn_tot, self._btn_diff):
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background: {_BG_CARD}; color: {_FG_PRIMARY};
-                        font-size: 9pt; padding: 4px 12px;
-                        border: 1px solid {_BG_BORDER}; border-radius: 3px;
-                    }}
-                    QPushButton:hover {{ background: #21262d; }}
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background: #161b22; color: #e6edf3;
+                        font-size: 9pt; padding: 4px 14px;
+                        border: 1px solid #30363d; border-radius: 4px;
+                        font-family: 'Segoe UI';
+                    }
+                    QPushButton:hover { background: #21262d; }
                 """)
                 btn.setCursor(Qt.PointingHandCursor)
             self._btn_tot.clicked.connect(lambda: self.perf_heatmap.set_mode('tot'))
@@ -6219,57 +6789,68 @@ else:
             perf_layout.addLayout(mode_bar)
             perf_layout.addWidget(self.perf_heatmap, 1)
 
-            self._stack.addWidget(self.bar_chart)      # 0
-            self._stack.addWidget(self.wpm_trend)       # 1
-            self._stack.addWidget(self.regression)      # 2
-            self._stack.addWidget(perf_container)        # 3
-            self._stack.addWidget(self.velocity)         # 4
-            self._stack.addWidget(self.efficiency)       # 5
+            self._stack.addWidget(self.bar_chart)    # 0
+            self._stack.addWidget(self.wpm_trend)    # 1
+            self._stack.addWidget(self.regression)   # 2
+            self._stack.addWidget(perf_container)    # 3
+            self._stack.addWidget(self.velocity)     # 4
+            self._stack.addWidget(self.efficiency)   # 5
 
             layout.addWidget(self._stack, 1)
 
+            # Select first
+            self._on_select(0)
+
         def _on_select(self, idx):
             self._stack.setCurrentIndex(idx)
+            for i, btn in enumerate(self._buttons):
+                btn.setChecked(i == idx)
 
         @property
         def active_index(self):
             return self._stack.currentIndex()
 
 
+    # ══════════════════════════════════════════════════════════════
+    # MAIN WINDOW
+    # ══════════════════════════════════════════════════════════════
+
     class BrailleMainWindow(QMainWindow):
-        """Main PyQtGraph application window for the Braille Touch Performance Monitor."""
+        """Main PyQtGraph application window — full redesign."""
 
         def __init__(self):
             super().__init__()
             self.setWindowTitle("Braille Touch Performance Monitor")
-            self.setMinimumSize(1280, 800)
+            self.setMinimumSize(1400, 860)
 
-            # PyQtGraph config
             pg.setConfigOptions(background="#0d1117", foreground="#e6edf3",
                                 antialias=True)
 
-            # Dark palette
             palette = QPalette()
-            palette.setColor(QPalette.Window, QColor("#0d1117"))
-            palette.setColor(QPalette.WindowText, QColor("#e6edf3"))
-            palette.setColor(QPalette.Base, QColor("#161b22"))
-            palette.setColor(QPalette.Text, QColor("#e6edf3"))
+            palette.setColor(QPalette.Window,      QColor("#0d1117"))
+            palette.setColor(QPalette.WindowText,  QColor("#e6edf3"))
+            palette.setColor(QPalette.Base,        QColor("#161b22"))
+            palette.setColor(QPalette.Text,        QColor("#e6edf3"))
+            palette.setColor(QPalette.Button,      QColor("#161b22"))
+            palette.setColor(QPalette.ButtonText,  QColor("#e6edf3"))
+            palette.setColor(QPalette.Highlight,   QColor("#58a6ff"))
+            palette.setColor(QPalette.HighlightedText, QColor("#0d1117"))
             self.setPalette(palette)
-            self.setStyleSheet(f"QMainWindow {{ background: {_BG_DARK}; }}")
+            self.setStyleSheet("QMainWindow { background: #0d1117; }")
 
             self._build_ui()
 
             # Snapshot cache
-            self._cached_ws = None
+            self._cached_ws    = None
             self._cached_ewiqr = None
             self._cached_welford = None
-            self._cached_vt = None
-            self._cached_skip = None
-            self._cached_diff = None
-            self._cached_wb = None
-            self._last_snap = 0
+            self._cached_vt    = None
+            self._cached_skip  = None
+            self._cached_diff  = None
+            self._cached_wb    = None
+            self._last_snap    = 0
 
-            # Update timer — 30fps
+            # Main update timer — 30fps
             self._timer = QTimer()
             self._timer.timeout.connect(self._update)
             self._timer.start(33)
@@ -6277,70 +6858,159 @@ else:
         def _build_ui(self):
             central = QWidget()
             self.setCentralWidget(central)
-            main_layout = QVBoxLayout(central)
-            main_layout.setContentsMargins(8, 8, 8, 8)
-            main_layout.setSpacing(6)
+            root_layout = QVBoxLayout(central)
+            root_layout.setContentsMargins(0, 0, 0, 0)
+            root_layout.setSpacing(0)
 
-            # ── Top row: Heatmap | Metrics | WordStats ──
-            top_splitter = QSplitter(Qt.Horizontal)
+            # ── Header bar ──────────────────────────────────────
+            self._status_bar = StatusBar()
+            root_layout.addWidget(self._status_bar)
 
-            self._heatmap = HeatmapWidget()
-            top_splitter.addWidget(self._heatmap)
+            # ── Main content area ────────────────────────────────
+            content = QWidget()
+            content.setStyleSheet("background: #0d1117;")
+            content_layout = QVBoxLayout(content)
+            content_layout.setContentsMargins(10, 10, 10, 10)
+            content_layout.setSpacing(8)
 
-            self._metrics = MetricsPanel()
-            top_splitter.addWidget(self._metrics)
-
-            self._word_stats_panel = WordStatsPanel()
-            top_splitter.addWidget(self._word_stats_panel)
-
-            top_splitter.setSizes([500, 380, 380])
-            main_layout.addWidget(top_splitter, 1)
-
-            # ── Bottom row: Threshold sliders + Edit button ──
-            bottom = QWidget()
-            bottom.setStyleSheet(f"background: {_BG_DARK};")
-            bottom_layout = QHBoxLayout(bottom)
-            bottom_layout.setContentsMargins(4, 4, 4, 4)
-
-            # Threshold sliders
-            slider_group = QGroupBox("ROW TOUCH THRESHOLDS (drag to adjust live)")
-            slider_group.setStyleSheet(f"""
-                QGroupBox {{
-                    color: {_ACCENT_ORANGE};
-                    font-size: 9pt;
-                    font-weight: bold;
-                    border: 1px solid {_BG_BORDER};
-                    border-radius: 4px;
-                    padding-top: 14px;
-                    margin-top: 6px;
-                }}
-                QGroupBox::title {{
-                    subcontrol-origin: margin;
-                    left: 10px;
-                    padding: 0 4px;
-                }}
+            # ── Upper split: Heatmap | Metrics | Word stats ──────
+            upper_splitter = QSplitter(Qt.Horizontal)
+            upper_splitter.setHandleWidth(2)
+            upper_splitter.setStyleSheet("""
+                QSplitter::handle { background: #21262d; }
             """)
-            slider_layout = QGridLayout(slider_group)
+
+            # Heatmap with section label
+            heatmap_container = QWidget()
+            heatmap_container.setStyleSheet("background: #0d1117;")
+            hm_layout = QVBoxLayout(heatmap_container)
+            hm_layout.setContentsMargins(0, 0, 0, 0)
+            hm_layout.setSpacing(4)
+            hm_lbl = QLabel("TOUCH PRESSURE MAP")
+            hm_lbl.setStyleSheet(
+                "color: #8b949e; font-size: 8pt; font-weight: bold; "
+                "font-family: 'Segoe UI'; letter-spacing: 2px; padding: 2px 4px;"
+            )
+            self._heatmap = HeatmapWidget()
+            hm_layout.addWidget(hm_lbl)
+            hm_layout.addWidget(self._heatmap, 1)
+            upper_splitter.addWidget(heatmap_container)
+
+            # Metrics panel with section label
+            metrics_container = QWidget()
+            metrics_container.setStyleSheet("background: #0d1117;")
+            mc_layout = QVBoxLayout(metrics_container)
+            mc_layout.setContentsMargins(0, 0, 0, 0)
+            mc_layout.setSpacing(4)
+            mc_lbl = QLabel("LIVE METRICS")
+            mc_lbl.setStyleSheet(
+                "color: #8b949e; font-size: 8pt; font-weight: bold; "
+                "font-family: 'Segoe UI'; letter-spacing: 2px; padding: 2px 4px;"
+            )
+            self._metrics = MetricsPanel()
+            mc_layout.addWidget(mc_lbl)
+            mc_layout.addWidget(self._metrics, 1)
+            upper_splitter.addWidget(metrics_container)
+
+            # Word stats with section label
+            ws_container = QWidget()
+            ws_container.setStyleSheet("background: #0d1117;")
+            ws_layout = QVBoxLayout(ws_container)
+            ws_layout.setContentsMargins(0, 0, 0, 0)
+            ws_layout.setSpacing(4)
+            ws_lbl = QLabel("WORD SCOREBOARD")
+            ws_lbl.setStyleSheet(
+                "color: #8b949e; font-size: 8pt; font-weight: bold; "
+                "font-family: 'Segoe UI'; letter-spacing: 2px; padding: 2px 4px;"
+            )
+            self._word_stats_panel = WordStatsPanel()
+            ws_layout.addWidget(ws_lbl)
+            ws_layout.addWidget(self._word_stats_panel, 1)
+            upper_splitter.addWidget(ws_container)
+
+            upper_splitter.setSizes([420, 520, 380])
+            content_layout.addWidget(upper_splitter, 2)
+
+            # ── Divider ──────────────────────────────────────────
+            divider = QFrame()
+            divider.setFrameShape(QFrame.HLine)
+            divider.setStyleSheet("background: #21262d; max-height: 1px;")
+            content_layout.addWidget(divider)
+
+            # ── Lower split: Plot panel | Controls ───────────────
+            lower_splitter = QSplitter(Qt.Horizontal)
+            lower_splitter.setHandleWidth(2)
+            lower_splitter.setStyleSheet("QSplitter::handle { background: #21262d; }")
+
+            # Plot panel
+            plot_container = QWidget()
+            plot_container.setStyleSheet("background: #0d1117;")
+            pc_layout = QVBoxLayout(plot_container)
+            pc_layout.setContentsMargins(0, 0, 0, 0)
+            pc_layout.setSpacing(4)
+            pc_lbl = QLabel("CHARTS")
+            pc_lbl.setStyleSheet(
+                "color: #8b949e; font-size: 8pt; font-weight: bold; "
+                "font-family: 'Segoe UI'; letter-spacing: 2px; padding: 2px 4px;"
+            )
+            self._plot_panel = PlotPanel()
+            pc_layout.addWidget(pc_lbl)
+            pc_layout.addWidget(self._plot_panel, 1)
+            lower_splitter.addWidget(plot_container)
+
+            # Controls sidebar
+            controls = QWidget()
+            controls.setFixedWidth(280)
+            controls.setStyleSheet(
+                "background: #161b22; border-left: 1px solid #21262d;"
+            )
+            ctrl_layout = QVBoxLayout(controls)
+            ctrl_layout.setContentsMargins(12, 12, 12, 12)
+            ctrl_layout.setSpacing(12)
+
+            # Threshold group
+            thr_lbl = QLabel("TOUCH THRESHOLDS")
+            thr_lbl.setStyleSheet(
+                "color: #f0883e; font-size: 8pt; font-weight: bold; "
+                "font-family: 'Segoe UI'; letter-spacing: 1px;"
+            )
+            ctrl_layout.addWidget(thr_lbl)
+
             self._threshold_sliders = []
             for i in range(GRID):
+                row_widget = QWidget()
+                row_widget.setStyleSheet("background: transparent;")
+                row_h = QHBoxLayout(row_widget)
+                row_h.setContentsMargins(0, 0, 0, 0)
+                row_h.setSpacing(6)
+
                 lbl = QLabel(f"R{i}")
-                lbl.setStyleSheet(f"color: #a0c4ff; font-family: monospace; font-size: 8pt;")
-                slider_layout.addWidget(lbl, i, 0)
+                lbl.setFixedWidth(20)
+                lbl.setStyleSheet(
+                    "color: #58a6ff; font-family: 'Segoe UI Mono', monospace;"
+                    "font-size: 8pt;"
+                )
                 sl = QSlider(Qt.Horizontal)
-                sl.setRange(0, 100)  # 0.0 to 50.0 in 0.5 steps
+                sl.setRange(0, 100)
                 sl.setValue(int(ROW_THRESHOLDS[i] * 2))
-                sl.setStyleSheet(f"""
-                    QSlider::groove:horizontal {{
-                        background: #1a1a2e; height: 6px; border-radius: 3px;
-                    }}
-                    QSlider::handle:horizontal {{
-                        background: #e94560; width: 14px; margin: -4px 0;
-                        border-radius: 7px;
-                    }}
+                sl.setStyleSheet("""
+                    QSlider::groove:horizontal {
+                        background: #21262d; height: 4px; border-radius: 2px;
+                    }
+                    QSlider::handle:horizontal {
+                        background: #f0883e; width: 12px; margin: -4px 0;
+                        border-radius: 6px;
+                    }
+                    QSlider::handle:horizontal:hover {
+                        background: #ff9944;
+                    }
                 """)
                 val_lbl = QLabel(f"{ROW_THRESHOLDS[i]:.1f}")
-                val_lbl.setStyleSheet(f"color: {_FG_PRIMARY}; font-family: monospace; font-size: 8pt;")
-                val_lbl.setMinimumWidth(35)
+                val_lbl.setFixedWidth(32)
+                val_lbl.setStyleSheet(
+                    "color: #e6edf3; font-family: 'Segoe UI Mono', monospace;"
+                    "font-size: 8pt;"
+                )
 
                 def _on_slider(value, row=i, vlbl=val_lbl):
                     real_val = value / 2.0
@@ -6348,37 +7018,48 @@ else:
                     vlbl.setText(f"{real_val:.1f}")
 
                 sl.valueChanged.connect(_on_slider)
-                slider_layout.addWidget(sl, i, 1)
-                slider_layout.addWidget(val_lbl, i, 2)
+                row_h.addWidget(lbl)
+                row_h.addWidget(sl, 1)
+                row_h.addWidget(val_lbl)
+                ctrl_layout.addWidget(row_widget)
                 self._threshold_sliders.append(sl)
 
-            bottom_layout.addWidget(slider_group, 1)
+            ctrl_layout.addStretch()
 
-            # Edit Words button
-            btn_edit = QPushButton("✎ Edit Words")
-            btn_edit.setStyleSheet(f"""
-                QPushButton {{
-                    background: {_BG_CARD}; color: {_ACCENT_BLUE};
+            # Buttons
+            btn_edit = QPushButton("✎  Edit Words")
+            btn_edit.setStyleSheet("""
+                QPushButton {
+                    background: #161b22; color: #58a6ff;
                     font-size: 10pt; font-weight: bold;
-                    padding: 10px 20px; border: 1px solid {_BG_BORDER};
-                    border-radius: 4px;
-                }}
-                QPushButton:hover {{ background: #21262d; }}
+                    padding: 10px; border: 1px solid #30363d;
+                    border-radius: 6px; font-family: 'Segoe UI';
+                }
+                QPushButton:hover { background: #21262d; border-color: #58a6ff; }
             """)
             btn_edit.setCursor(Qt.PointingHandCursor)
             btn_edit.clicked.connect(self._open_editor)
-            bottom_layout.addWidget(btn_edit)
+            ctrl_layout.addWidget(btn_edit)
 
-            main_layout.addWidget(bottom)
+            btn_end = QPushButton("⏹  End Session")
+            btn_end.setStyleSheet("""
+                QPushButton {
+                    background: #161b22; color: #f85149;
+                    font-size: 10pt; font-weight: bold;
+                    padding: 10px; border: 1px solid #30363d;
+                    border-radius: 6px; font-family: 'Segoe UI';
+                }
+                QPushButton:hover { background: #21262d; border-color: #f85149; }
+            """)
+            btn_end.setCursor(Qt.PointingHandCursor)
+            btn_end.clicked.connect(self.close)
+            ctrl_layout.addWidget(btn_end)
 
-            # ── Plot panel (separate window) ──
-            self._plot_window = QMainWindow()
-            self._plot_window.setWindowTitle("Braille Monitor — Plot Panel")
-            self._plot_window.setMinimumSize(900, 550)
-            self._plot_window.setStyleSheet(f"QMainWindow {{ background: {_BG_DARK}; }}")
-            self._plot_panel = PlotPanel()
-            self._plot_window.setCentralWidget(self._plot_panel)
-            self._plot_window.show()
+            lower_splitter.addWidget(plot_container)
+            lower_splitter.addWidget(controls)
+
+            content_layout.addWidget(lower_splitter, 3)
+            root_layout.addWidget(content, 1)
 
         def _open_editor(self):
             dlg = WordBoundaryEditorQt(self)
@@ -6389,37 +7070,39 @@ else:
             """Main 30fps update loop."""
             now = time.time()
 
-            # ── Read latest frame ──
+            # Tick session timer
+            self._status_bar.tick()
+
+            # Read latest frame
             with latest_frame_lk:
                 frame = latest_frame.copy()
 
-            # ── Compute delta + threshold mask ──
+            # Compute delta + threshold mask
             raw_delta = np.maximum(frame - baseline, 0.0)
             thresh_delta = raw_delta * (raw_delta >= ROW_THRESHOLDS[:, np.newaxis])
 
-            # ── Update heatmap (every frame, 30fps) ──
+            # Update heatmap every frame
             self._heatmap.update_data(thresh_delta)
 
-            # ── Check for label refresh ──
+            # Check for label refresh
             global _cell_labels_dirty
             if _cell_labels_dirty:
                 _cell_labels_dirty = False
                 self._heatmap.refresh_labels()
 
-            # ── Throttled snapshots (2fps) ──
+            # Throttled snapshots
             if self._cached_ws is None or (now - self._last_snap) >= _SNAPSHOT_INTERVAL:
                 self._last_snap = now
-                self._cached_diff = cell_diff.snapshot()
-                self._cached_ws = word_stats.snapshot()
-                self._cached_ewiqr = ewiqr_tracker.snapshot()
+                self._cached_diff    = cell_diff.snapshot()
+                self._cached_ws      = word_stats.snapshot()
+                self._cached_ewiqr   = ewiqr_tracker.snapshot()
                 self._cached_welford = welford_per_word.snapshot()
-                self._cached_vt = velocity_tracker.snapshot()
+                self._cached_vt      = velocity_tracker.snapshot()
                 with word_boundaries_lock:
                     self._cached_wb = {k: list(v) for k, v in word_boundaries.items()}
                 self._cached_skip = compute_skip_stats(
                     self._cached_wb, self._cached_ws["word_count"])
 
-                # ── Update metrics panel ──
                 m = perf.snapshot
                 self._metrics.update_metrics(
                     m, self._cached_ws, self._cached_vt, self._cached_ewiqr,
@@ -6427,36 +7110,35 @@ else:
                     wpm_trend.get_current_ema(), list(_cached_finger_wpm),
                     self._cached_skip)
 
-                # ── Update word stats panel ──
                 self._word_stats_panel.update_stats(self._cached_ws, self._cached_skip)
 
-            # ── Update active plot only ──
             if self._cached_ws is None:
                 return
 
+            # Update active plot only
             idx = self._plot_panel.active_index
 
-            if idx == 0:  # Bar chart
+            if idx == 0:
                 self._plot_panel.bar_chart.update_chart(
                     self._cached_welford, self._cached_ws["word_count"],
                     self._cached_ewiqr, self._cached_wb)
 
-            elif idx == 1:  # WPM Trend
+            elif idx == 1:
                 x_raw, y_raw, y_ema, y_max = wpm_trend.get_plot_data()
                 self._plot_panel.wpm_trend.update_trend(x_raw, y_raw, y_ema, y_max)
 
-            elif idx == 2:  # Regression chart
+            elif idx == 2:
                 with word_stats._lock:
                     reg_count = dict(word_stats._regression_count)
                 self._plot_panel.regression.update_regressions(
                     reg_count, self._cached_ws["flagged_words"])
 
-            elif idx == 3:  # Performance heatmap
-                Z_tot = np.zeros((GRID, GRID))
+            elif idx == 3:
+                Z_tot  = np.zeros((GRID, GRID))
                 Z_diff = np.zeros((GRID, GRID))
                 for r in range(GRID):
                     for e in self._cached_wb.get(r, []):
-                        w = e["word"]
+                        w  = e["word"]
                         wf = self._cached_welford.get(w)
                         if wf:
                             for c in range(e["start"], e["end"] + 1):
@@ -6469,32 +7151,152 @@ else:
                                     Z_diff[r, c] = ewiqr_pw[w]
                 self._plot_panel.perf_heatmap.update_perf(Z_tot, Z_diff, self._cached_wb)
 
-            elif idx == 4:  # Velocity profile
+            elif idx == 4:
                 with vel_profile._lock:
                     vel_snap = list(vel_profile._velocity_history)
                 self._plot_panel.velocity.update_velocities(vel_snap)
 
-            elif idx == 5:  # Path efficiency
+            elif idx == 5:
                 with eff_plot._lock:
                     eff_hist = list(eff_plot.efficiency_history)
-                    evt_idx = list(eff_plot.event_indices)
+                    evt_idx  = list(eff_plot.event_indices)
                 cached_tx = eff_plot._cached_trend_x
                 cached_ty = eff_plot._cached_trend_y
                 self._plot_panel.efficiency.update_efficiency(
                     eff_hist, evt_idx, cached_tx, cached_ty)
 
-            # ── Check editor request (from legacy code path) ──
+            # Check editor request
             if _editor_requested.is_set():
                 _editor_requested.clear()
                 self._open_editor()
 
         def closeEvent(self, event):
-            """Print final report and clean up."""
+            """Generate session figures, close DataLogger, print report."""
             self._timer.stop()
-            if hasattr(self, '_plot_window'):
-                self._plot_window.close()
+
+            # ── Generate session figures ────────────────────────────
+            try:
+                ws_final  = word_stats.snapshot()
+                with word_boundaries_lock:
+                    wb_final = {k: list(v) for k, v in word_boundaries.items()}
+                ewiqr_final = ewiqr_tracker.snapshot()
+
+                x_raw_f, y_raw_f, y_ema_f, _ = wpm_trend.get_plot_data()
+
+                with word_stats._lock:
+                    reg_count_f = dict(word_stats._regression_count)
+
+                with vel_profile._lock:
+                    vel_hist_f = [np.array(v) for v in vel_profile._velocity_history]
+
+                with eff_plot._lock:
+                    eff_hist_f = list(eff_plot.efficiency_history)
+                    evt_idx_f  = list(eff_plot.event_indices)
+
+                data_logger.generate_figures(
+                    wpm_x=x_raw_f, wpm_raw=y_raw_f, wpm_ema=y_ema_f,
+                    regression_count=reg_count_f,
+                    flagged_words=ws_final["flagged_words"],
+                    vel_history=vel_hist_f if vel_hist_f else [],
+                    eff_history=eff_hist_f, eff_indices=evt_idx_f,
+                    diff_z=ewiqr_final.get("Z_tot"),
+                    wb_snap=wb_final,
+                    weight_note=_WEIGHT_NOTE,
+                )
+            except Exception as e:
+                print(f"[DataLogger] Figure generation error: {e}")
+
+            # ── Close DataLogger ──────────────────────────────────
+            try:
+                data_logger.close()
+            except Exception:
+                pass
+
+            # ── Print final report ────────────────────────────────
             _print_final_report()
+
+            # ── Session summary dialog ────────────────────────────
+            try:
+                self._show_summary_dialog()
+            except Exception:
+                pass
+
             event.accept()
+
+        def _show_summary_dialog(self):
+            """Show a styled session summary dialog."""
+            ws  = word_stats.snapshot()
+            vt  = velocity_tracker.snapshot()
+            m   = perf.snapshot
+
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Session Summary")
+            dlg.setMinimumWidth(480)
+            dlg.setStyleSheet("""
+                QDialog { background: #0d1117; }
+                QLabel  { color: #e6edf3; font-family: 'Segoe UI'; }
+            """)
+            layout = QVBoxLayout(dlg)
+            layout.setSpacing(16)
+            layout.setContentsMargins(24, 24, 24, 24)
+
+            title = QLabel("Session Complete")
+            title.setStyleSheet(
+                "color: #e6edf3; font-size: 16pt; font-weight: bold; "
+                "font-family: 'Segoe UI';"
+            )
+            layout.addWidget(title)
+
+            sep = QFrame()
+            sep.setFrameShape(QFrame.HLine)
+            sep.setStyleSheet("background: #21262d;")
+            layout.addWidget(sep)
+
+            grid = QGridLayout()
+            grid.setSpacing(10)
+
+            def _stat(label, value, accent="#58a6ff"):
+                l = QLabel(label)
+                l.setStyleSheet("color: #8b949e; font-size: 9pt;")
+                v = QLabel(str(value))
+                v.setStyleSheet(f"color: {accent}; font-size: 12pt; font-weight: bold;")
+                return l, v
+
+            stats = [
+                ("Final WPM",        f"{m['wpm']:.0f}",                "#58a6ff"),
+                ("EMA WPM Trend",    f"{wpm_trend.get_current_ema():.1f}", "#58a6ff"),
+                ("Total Touches",    str(ws['total_registered']),       "#e6edf3"),
+                ("Regressions",      str(ws['total_regressions']),      "#f0883e"),
+                ("Hesitation Rate",  f"{ws['hesitation_rate']*100:.0f}%", "#f0883e"),
+                ("Consistency",      f"{vt['consistency']:.2f}",        "#3fb950"),
+                ("Path Efficiency",  f"{eff_plot.get_avg_efficiency():.2f}", "#3fb950"),
+                ("Avg Difficulty",   f"{m['avg_difficulty']:.2f}",      "#f85149"),
+                ("Most Touched",     ws['most_touched'] or '—',         "#e6edf3"),
+                ("Hardest Word",     ws['hardest_word'] or '—',         "#f85149"),
+                ("Data saved to",    "session_data/",                   "#8b949e"),
+            ]
+
+            for row_i, (label, value, accent) in enumerate(stats):
+                l_w, v_w = _stat(label, value, accent)
+                grid.addWidget(l_w, row_i, 0)
+                grid.addWidget(v_w, row_i, 1)
+
+            layout.addLayout(grid)
+
+            btn_close = QPushButton("Close")
+            btn_close.setStyleSheet("""
+                QPushButton {
+                    background: #161b22; color: #e6edf3;
+                    font-size: 10pt; padding: 8px 24px;
+                    border: 1px solid #30363d; border-radius: 6px;
+                    font-family: 'Segoe UI';
+                }
+                QPushButton:hover { background: #21262d; }
+            """)
+            btn_close.clicked.connect(dlg.accept)
+            layout.addWidget(btn_close, 0, Qt.AlignRight)
+
+            dlg.exec_()
 
 
     def _print_final_report():
@@ -6508,14 +7310,13 @@ else:
         print(f"Final WPM (sliding window): {perf._wpm_counter.get_wpm()}")
         print(f"Final WPM trend (EMA)    : {wpm_trend.get_current_ema():.1f}")
 
-        # Per-finger summary
         print("\n═══ PER-FINGER STATS (Butterfly) ═══")
         for fi in range(2):
             ft = finger_trackers[fi]
-            fi_ws = ft["word_stats"].snapshot()
+            fi_ws  = ft["word_stats"].snapshot()
             fi_wpm = ft["perf"]._wpm_counter.get_wpm()
             fi_trend = ft["wpm_trend"].get_current_ema()
-            fi_vt = ft["velocity"].snapshot()
+            fi_vt  = ft["velocity"].snapshot()
             print(f"\n── Finger {fi} ──")
             print(f"  Touches: {fi_ws['total_registered']}")
             print(f"  WPM: {fi_wpm:.0f}  (EMA trend: {fi_trend:.1f})")
@@ -6523,7 +7324,6 @@ else:
             print(f"  Velocity: {fi_vt['mean_vel']:.1f} cells/s  "
                   f"consistency: {fi_vt['consistency']:.2f}")
 
-        # WPM trend report
         _, y_raw_final, y_ema_final, _ = wpm_trend.get_plot_data()
         if y_ema_final:
             print(f"\n═══ WPM TREND REPORT  [V-4] ═══")
@@ -6536,27 +7336,17 @@ else:
                 print(f"Session avg EMA WPM      : {avg_ema:.1f}")
                 print(f"Peak sustained WPM (EMA) : {max(y_ema_final):.1f}")
 
-        # Regression report
         print("\n═══ REGRESSION REPORT  [M-H1] ═══")
         print(f"Total regressions        : {ws['total_regressions']}")
-        print(f"Hesitation rate          : {ws['hesitation_rate']*100:.1f}%  "
-              f"({ws['total_regressions']} regressions / "
-              f"{ws['total_registered']} touches)")
+        print(f"Hesitation rate          : {ws['hesitation_rate']*100:.1f}%")
         if ws["top_regressed"]:
             print("\n── Top regressed words ──")
             for word, cnt in ws["top_regressed"]:
                 flag = "  ⚠ FLAGGED" if word in ws["flagged_words"] else ""
                 print(f"  {word:<14}: {cnt} regression(s){flag}")
-        if ws["flagged_words"]:
-            print(f"\n── Flagged words (>{REGRESSION_FLAG_THRESHOLD} regressions) ──")
-            for w in ws["flagged_words"]:
-                print(f"  {w}")
-        else:
-            print("\nNo words flagged for excessive regressions.")
 
-        # EWIQR report
         final_ewiqr = ewiqr_tracker.snapshot()
-        final_welf = welford_per_word.snapshot()
+        final_welf  = welford_per_word.snapshot()
         print("\n═══ EWIQR DIFFICULTY REPORT  [M-D2] ═══")
         top5_final = final_ewiqr.get("top5_hardest", [])
         if top5_final:
@@ -6567,34 +7357,16 @@ else:
                 tq3 = final_ewiqr["Q3_per_word"].get(tw, 0)
                 print(f"  {rank}. {tw:<14}: EWIQR={tewiqr:.3f}s  "
                       f"Q1={tq1:.2f}s  Q3={tq3:.2f}s  [{tconf}]")
-        else:
-            print("  (not enough data for EWIQR ranking)")
 
-        if final_welf:
-            total_n = sum(v["n"] for v in final_welf.values())
-            if total_n > 0:
-                session_avg = sum(v["mean"] * v["n"] for v in final_welf.values()) / total_n
-                print(f"\nSession avg duration     : {session_avg:.3f}s")
-            print("\n── Per-word Welford stats ──")
-            for w_name in sorted(final_welf.keys()):
-                wf = final_welf[w_name]
-                print(f"  {w_name:<14}: n={wf['n']:>3}  "
-                      f"mean={wf['mean']:.3f}s  std={wf['std']:.3f}s")
-
-        # Skip stats
         with word_boundaries_lock:
             wb_final = {k: list(v) for k, v in word_boundaries.items()}
         skip_final = compute_skip_stats(wb_final, ws["word_count"])
-        skip_clusters = compute_skip_clusters(skip_final["skip_mask"])
         print("\n═══ SKIP STATISTICS REPORT  [M-D3] ═══")
         print(f"Skip rate                : {skip_final['skip_rate']:.1f}%")
         print(f"Skipped words            : {len(skip_final['skipped_words'])} / "
               f"{skip_final.get('total_words', GRID*GRID)}")
-
-        # Word counts
         print("\n── Word counts ──")
-        for word, count in sorted(ws["word_count"].items(),
-                                   key=lambda x: x[1], reverse=True):
+        for word, count in sorted(ws["word_count"].items(), key=lambda x: x[1], reverse=True):
             print(f"  {word:<14}: {count}")
         print("\n── Touch sequence (last 20) ──")
         print("  " + " → ".join(ws["touch_sequence"]))
@@ -6605,16 +7377,15 @@ else:
         app = QApplication(sys.argv)
         app.setStyle("Fusion")
 
-        # Dark palette for the entire application
         palette = QPalette()
-        palette.setColor(QPalette.Window, QColor("#0d1117"))
-        palette.setColor(QPalette.WindowText, QColor("#e6edf3"))
-        palette.setColor(QPalette.Base, QColor("#161b22"))
+        palette.setColor(QPalette.Window,      QColor("#0d1117"))
+        palette.setColor(QPalette.WindowText,  QColor("#e6edf3"))
+        palette.setColor(QPalette.Base,        QColor("#161b22"))
         palette.setColor(QPalette.AlternateBase, QColor("#21262d"))
-        palette.setColor(QPalette.Text, QColor("#e6edf3"))
-        palette.setColor(QPalette.Button, QColor("#161b22"))
-        palette.setColor(QPalette.ButtonText, QColor("#e6edf3"))
-        palette.setColor(QPalette.Highlight, QColor("#58a6ff"))
+        palette.setColor(QPalette.Text,        QColor("#e6edf3"))
+        palette.setColor(QPalette.Button,      QColor("#161b22"))
+        palette.setColor(QPalette.ButtonText,  QColor("#e6edf3"))
+        palette.setColor(QPalette.Highlight,   QColor("#58a6ff"))
         palette.setColor(QPalette.HighlightedText, QColor("#0d1117"))
         app.setPalette(palette)
 

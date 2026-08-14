@@ -115,14 +115,22 @@ void loop()
     }
   }
 
-  // print matrix
+  // print matrix with per-row XOR checksum
+  // Format: v0 \t v1 \t ... v6 \t CHK\n
+  // CHK = XOR of the integer byte values of v0..v6 (each clamped 0-255)
   for(int tx = 0; tx < TX_COUNT; tx++)
   {
+    uint8_t chk = 0;
     for(int rx = 0; rx < RX_COUNT; rx++)
     {
-      Serial.print(touchMatrix[tx][rx]);
+      int v = touchMatrix[tx][rx];
+      Serial.print(v);
       Serial.print("\t");
+      chk ^= (uint8_t)(v & 0xFF);
     }
+    // Append checksum as last tab-separated field on the row
+    Serial.print("CHK");
+    Serial.print(chk);
     Serial.println();
   }
   Serial.println();
