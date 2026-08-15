@@ -3721,8 +3721,11 @@ class DataLogger:
     def __init__(self):
         self._lock = threading.Lock()
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        os.makedirs("session_data", exist_ok=True)
-        self._session_dir = "session_data"
+        # Always write next to the script itself, regardless of launch CWD
+        _script_dir = os.path.dirname(os.path.abspath(__file__))
+        _data_dir   = os.path.join(_script_dir, "session_data")
+        os.makedirs(_data_dir, exist_ok=True)
+        self._session_dir = _data_dir
         self._ts = ts
 
         touch_path = os.path.join(self._session_dir, f"{ts}_touch_events.csv")
@@ -5223,8 +5226,9 @@ if _LEGACY_MODE:
                     _last_snapshot_log_time = time.time()
                     try:
                         _vt_snap = velocity_tracker.snapshot()
+                        # Reuse _cached_wb_snap (already locked above) — no second lock needed
                         _skip_snap_log = compute_skip_stats(
-                            {k: list(v) for k, v in word_boundaries.items()},
+                            _cached_wb_snap,
                             _cached_ws.get("word_count", {}),
                         )
                         data_logger.log_snapshot(
