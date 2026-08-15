@@ -1,0 +1,4 @@
+timestamp,word,row,col,duration_ms,vel_mean,reversals,zero_crossings,difficulty,is_regression,wpm,path_efficiency
+1786721574.483,Switch,2,5,1227.6,0.000,0,0,0.000,0,1.0,1.000
+1786721576.571,Alligator,0,5,1564.2,0.000,0,0,0.000,0,2.0,1.000
+1786721576.572,Frog,6,5,1037.4,0.000,0,0,0.000,0,3.0,1.000
