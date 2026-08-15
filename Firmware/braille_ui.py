@@ -217,6 +217,7 @@ else:
         QLabel, QSlider, QPushButton, QDialog, QScrollArea, QSpinBox,
         QLineEdit, QStackedWidget, QListWidget, QListWidgetItem,
         QMessageBox, QSplitter, QFrame, QApplication, QGroupBox,
+        QTableWidget, QTableWidgetItem, QHeaderView,
     )
     from PyQt5.QtCore import Qt, QTimer
     from PyQt5.QtGui import QFont, QColor, QPalette
@@ -6327,7 +6328,7 @@ else:
             )
             layout.addWidget(hdr)
 
-            from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+
             self._table = QTableWidget(0, 4)
             self._table.setHorizontalHeaderLabels(["Word", "Touches", "Regress.", "Status"])
             self._table.setStyleSheet(f"""
