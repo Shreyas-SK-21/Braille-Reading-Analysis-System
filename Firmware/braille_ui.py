@@ -233,6 +233,13 @@ TX_SHIFT    = -1          # logical_col = (raw_col + TX_SHIFT) % GRID
 # Per-row ADC-delta thresholds — tune until idle noise stays below them
 ROW_THRESHOLDS = np.array([30, 25, 30, 30, 30, 30, 30], dtype=float)
 
+# Re-trigger dead-time: minimum seconds before the SAME cell can register
+# a new touch event. Derived from 5-run CSV analysis: false re-triggers
+# during a sustained ~1600ms hold occur every ~300ms on average, so 400ms
+# suppresses all in-hold phantom events while still allowing genuine
+# intentional revisits (backtracking users return after >500ms away).
+RETRIGGER_DEAD_TIME_S = 0.40
+
 MIN_PRESSED_CELLS    = 1
 BOLD_PEAK_POWER      = 2.0
 
@@ -4110,12 +4117,28 @@ def metrics_thread():
     det_smooth   = np.zeros((GRID, GRID))
     initialized  = False
 
+    # Per-cell re-trigger dead-time tracker: maps (row, col) -> last accepted time
+    _cell_last_fired: dict = {}
+
     fingers = [FingerState(0), FingerState(1)]
 
     # ── helper: build and record a completed TouchEvent for finger fi ──
     def _finalise_touch(fi: int, touch_end: float):
         f = fingers[fi]
         ft = finger_trackers[fi]
+
+        # ── Re-trigger dead-time gate ──────────────────────────────────
+        # If this cell fired very recently (within RETRIGGER_DEAD_TIME_S),
+        # it is almost certainly a phantom re-trigger caused by finger
+        # pressure fluctuating across the threshold during a sustained hold.
+        # Discard the event entirely to keep CSVs and metrics clean.
+        _gate_rc = f.first_peak_logic  # (row, col) in logical space
+        if _gate_rc is not None:
+            _last_t = _cell_last_fired.get(_gate_rc, 0.0)
+            if (touch_end - _last_t) < RETRIGGER_DEAD_TIME_S:
+                # Dead-time active — silently drop this touch
+                return
+            _cell_last_fired[_gate_rc] = touch_end
 
         duration = touch_end - f.touch_start
         pl  = path_length(f.path_pts)
