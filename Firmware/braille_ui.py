@@ -3597,6 +3597,98 @@ class PerformanceMetrics:
 
 
 # ══════════════════════════════════════════════════════════════
+# ADAPTIVE DEAD-TIME — EMA-based per-session false-trigger suppressor
+# ══════════════════════════════════════════════════════════════
+
+class AdaptiveDeadTime:
+    """
+    Lightweight adaptive re-trigger dead-time estimator.
+
+    Problem: during a sustained finger press (~1600ms), ADC signal
+    fluctuates across the touch threshold, generating phantom re-fires
+    on the same cell every ~300ms.  A fixed dead-time blocks those but
+    may be too conservative or too loose as conditions change.
+
+    Solution: observe every inter-touch interval on the same cell.
+    Feed *short* intervals (below 2×current dead-time) into an EMA
+    that tracks the session’s actual false-trigger speed.  A second
+    EMA smooths the dead-time output itself so changes are gradual.
+
+      dead_time = clamp(ema_interval × SAFETY_MARGIN, MIN, MAX)
+
+    Both EMA alphas are intentionally small (slow learner) so a single
+    outlier interval has minimal effect.
+    """
+
+    # Tuning knobs—change only these to tune behaviour:
+    MIN_DT        = 0.15   # s — hard floor (very responsive hardware)
+    MAX_DT        = 0.75   # s — hard ceiling (very slow hardware)
+    SAFETY_MARGIN = 1.40   # dead_time target = learned_interval × this
+    INTERVAL_ALPHA = 0.12  # EMA rate for false-trigger interval estimate
+    SMOOTH_ALPHA   = 0.08  # EMA rate for dead_time output (anti-jitter)
+    # Only intervals below (current dead_time × CLASSIFY_RATIO) are treated
+    # as false re-triggers and fed into the interval EMA.
+    CLASSIFY_RATIO = 2.0
+
+    def __init__(self, initial_dt: float = RETRIGGER_DEAD_TIME_S):
+        self._dt            = float(initial_dt)
+        # Initialise interval estimate by back-calculating from initial_dt
+        self._ema_interval  = initial_dt / self.SAFETY_MARGIN
+        self._n_obs         = 0        # count of intervals that updated the EMA
+        self._lock          = threading.Lock()
+
+    # ------------------------------------------------------------------ #
+    @property
+    def value(self) -> float:
+        """Current dead-time in seconds (thread-safe snapshot)."""
+        with self._lock:
+            return self._dt
+
+    # ------------------------------------------------------------------ #
+    def observe(self, interval_s: float) -> bool:
+        """
+        Feed the time elapsed since the last *accepted* touch on this cell.
+
+        Returns True  → block this touch (within dead-time).
+        Returns False → accept this touch.
+
+        Side-effect: updates the EMA if the interval looks like a
+        false re-trigger (interval < current_dt × CLASSIFY_RATIO).
+        """
+        with self._lock:
+            blocked = interval_s < self._dt
+
+            # Feed short intervals into the learner
+            if interval_s < self._dt * self.CLASSIFY_RATIO:
+                self._n_obs += 1
+                # EMA update on the interval estimate
+                self._ema_interval = (
+                    (1.0 - self.INTERVAL_ALPHA) * self._ema_interval
+                    + self.INTERVAL_ALPHA * interval_s
+                )
+                # Target dead-time from learned interval
+                target = self._ema_interval * self.SAFETY_MARGIN
+                target = max(self.MIN_DT, min(self.MAX_DT, target))
+                # Smooth the dead-time output (prevents jitter from single outlier)
+                self._dt = (
+                    (1.0 - self.SMOOTH_ALPHA) * self._dt
+                    + self.SMOOTH_ALPHA * target
+                )
+
+            return blocked
+
+    # ------------------------------------------------------------------ #
+    def status(self) -> str:
+        """One-line human-readable summary for logging."""
+        with self._lock:
+            return (
+                f"AdaptDT: dt={self._dt*1000:.0f}ms  "
+                f"learned={self._ema_interval*1000:.0f}ms  "
+                f"n_obs={self._n_obs}"
+            )
+
+
+# ══════════════════════════════════════════════════════════════
 # DATA LOGGER — Session CSV export + Publication-quality PNGs
 # ══════════════════════════════════════════════════════════════
 
@@ -3927,8 +4019,10 @@ monitor_3d       = Monitor3D()                # V-6
 vel_profile      = VelocityProfileMonitor()    # V-7
 eff_plot         = EfficiencyPlot()             # V-8
 
-data_logger = DataLogger()
+data_logger          = DataLogger()
+adaptive_dead_time   = AdaptiveDeadTime()   # learns false-trigger speed during session
 _last_snapshot_log_time = time.time()
+print(f"[AdaptDT] Initial: {adaptive_dead_time.status()}")
 
 # ── Per-finger tracker sets (butterfly dual-finger tracking) ──
 finger_trackers = [
@@ -4127,15 +4221,16 @@ def metrics_thread():
         f = fingers[fi]
         ft = finger_trackers[fi]
 
-        # ── Re-trigger dead-time gate ──────────────────────────────────
-        # If this cell fired very recently (within RETRIGGER_DEAD_TIME_S),
-        # it is almost certainly a phantom re-trigger caused by finger
-        # pressure fluctuating across the threshold during a sustained hold.
-        # Discard the event entirely to keep CSVs and metrics clean.
+        # ── Adaptive dead-time gate ──────────────────────────────────
+        # Feed the interval to AdaptiveDeadTime.observe().
+        # It updates its EMA internally and returns True to block.
+        # Only update _cell_last_fired on accepted touches so the next
+        # interval is measured from the last *genuine* fire.
         _gate_rc = f.first_peak_logic  # (row, col) in logical space
         if _gate_rc is not None:
-            _last_t = _cell_last_fired.get(_gate_rc, 0.0)
-            if (touch_end - _last_t) < RETRIGGER_DEAD_TIME_S:
+            _last_t   = _cell_last_fired.get(_gate_rc, 0.0)
+            _interval = touch_end - _last_t
+            if adaptive_dead_time.observe(_interval):
                 # Dead-time active — silently drop this touch
                 return
             _cell_last_fired[_gate_rc] = touch_end
