@@ -1238,9 +1238,29 @@ def analyse_touch(delta: np.ndarray) -> dict:
             confidence=min(1.0, 1.0 / (spread + 1e-9)),
         )))
 
-    # Sort by score descending, keep top 2
+    # Sort by score descending
     scored.sort(key=lambda x: x[0], reverse=True)
-    peaks = [info for _score, info in scored[:2]]
+    
+    # Hardware Crosstalk Suppression:
+    # Multiplexer/ADC capacitance causes phantom signals on the same row or col,
+    # especially during lift-off. If a weaker peak shares a row or col with a 
+    # stronger peak AND is < 60% of its value, we classify it as a ghost and drop it.
+    filtered_scored = []
+    for score, info in scored:
+        is_ghost = False
+        r, c = info["peak_rc"]
+        v = info["peak_value"]
+        for _, stronger_info in filtered_scored:
+            sr, sc = stronger_info["peak_rc"]
+            sv = stronger_info["peak_value"]
+            if (r == sr or c == sc) and v < 0.6 * sv:
+                is_ghost = True
+                break
+        if not is_ghost:
+            filtered_scored.append((score, info))
+
+    # Keep top 2 valid peaks
+    peaks = [info for _score, info in filtered_scored[:2]]
 
     if not peaks:
         return EMPTY
