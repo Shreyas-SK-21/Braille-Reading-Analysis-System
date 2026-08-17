@@ -184,10 +184,14 @@ if _WEIGHT_PRESET not in _PRESET_MAP:
     print(f"[WARNING] Unknown weight preset '{_WEIGHT_PRESET}', using 'default'.")
     _WEIGHT_PRESET = "default"
 
-# ═══════════════════════════ MODE FLAG ═════════════════════════
-# Run with --legacy to use the original Matplotlib/Tkinter UI.
-# Default (no flag) uses the new PyQtGraph/PyQt5 real-time UI.
+# ═══════════════════════════ MODE FLAGS ════════════════════════
+# --legacy    : use the original Matplotlib/Tkinter UI.
+# --sweep-mode: hardware calibration sweep — disables regression
+#               counter, shows 7×7 coverage grid instead.
 _LEGACY_MODE = "--legacy" in sys.argv
+SWEEP_MODE   = "--sweep-mode" in sys.argv
+if SWEEP_MODE:
+    print("[CONFIG] Sweep mode ACTIVE — regression counter disabled, coverage grid shown.")
 
 if _LEGACY_MODE:
     import matplotlib
@@ -271,6 +275,13 @@ print(f"[CONFIG] {_WEIGHT_NOTE}")
 # ── M-H1: Regression flag threshold ──────────────────────────
 # Words touched more than this many times as regressions are "flagged"
 REGRESSION_FLAG_THRESHOLD = 3
+
+# ── M-H1: Time-windowed regression ───────────────────────────
+# A touch only counts as a regression if the same word was already
+# touched within this many seconds. Prevents false regressions in
+# long sessions or multi-pass sweeps (e.g. row sweep over 2+ min).
+# Set to None to use the original session-lifetime seen-set behaviour.
+REGRESSION_WINDOW_S = 30.0   # seconds
 
 # ── M-D2: EWIQR per-word difficulty tracker ──────────────────
 EWIQR_D2_LAMBDA       = 0.85   # decay factor per new touch (≠ velocity λ)
@@ -941,23 +952,28 @@ class WordStatsTracker:
         self._touch_seq: list[str] = []
 
         # ── M-H1 regression state ─────────────────────────────
-        self._seen              : set            = set()
-        self._regression_count  : dict[str, int] = defaultdict(int)
-        self._total_regressions : int            = 0
-        self._total_touches     : int            = 0
+        # _seen maps word -> timestamp of last accepted (non-regression) touch.
+        # This replaces the old plain set() to enable time-windowed regression.
+        self._seen              : dict[str, float] = {}   # word -> last_seen_time
+        self._regression_count  : dict[str, int]   = defaultdict(int)
+        self._total_regressions : int              = 0
+        self._total_touches     : int              = 0
 
     def register(self, logical_row: int, logical_col: int,
                  difficulty: float = 0.0) -> Optional[str]:
         """
         Record a touch at (logical_row, logical_col).
 
-        Regression detection (M-H1):
-          - If the resolved word is already in self._seen → regression.
-          - Otherwise → first touch of this word; add to seen.
+        Regression detection (M-H1, time-windowed):
+          - In SWEEP_MODE: regression counter is disabled entirely.
+          - Otherwise: a touch is a regression only if the same word was
+            already touched within REGRESSION_WINDOW_S seconds. After
+            that window expires, the cell is treated as a fresh visit.
 
         Returns the word label (or None if out of bounds).
         """
         word = get_word_from_touch(logical_row, logical_col)
+        now  = time.time()
         with self._lock:
             # ── existing tracking ──────────────────────────────
             if word:
@@ -966,17 +982,21 @@ class WordStatsTracker:
                 self._word_diff_sum[word]    += difficulty
                 self._touch_seq.append(word)
 
-            # ── M-H1: regression check ─────────────────────────
-            # Increment total_touches for every resolved word touch.
-            if word:
+            # ── M-H1: windowed regression check ───────────────
+            if word and not SWEEP_MODE:
                 self._total_touches += 1
-                if word in self._seen:
-                    # Regression: reader returned to a previously seen word
+                last_t = self._seen.get(word, None)
+                window = REGRESSION_WINDOW_S  # may be None → session-lifetime
+                is_regression = (
+                    last_t is not None and
+                    (window is None or (now - last_t) <= window)
+                )
+                if is_regression:
                     self._regression_count[word] += 1
                     self._total_regressions      += 1
                 else:
-                    # First encounter: add to the seen set
-                    self._seen.add(word)
+                    # Fresh visit (first touch, or window expired) — update stamp
+                    self._seen[word] = now
 
         return word
 
@@ -6383,37 +6403,84 @@ else:
             layout.addWidget(self._seq_label)
 
         def update_stats(self, ws, skip_snap):
-            wc   = ws["word_count"]
-            rc   = ws.get("regression_count", {})
-            # rc may not be directly in snapshot; rebuild from top_regressed
+            wc       = ws["word_count"]
             reg_dict = dict(ws.get("top_regressed", []))
             flagged  = set(ws["flagged_words"])
 
-            # Sort by touches descending
-            sorted_words = sorted(wc.items(), key=lambda x: x[1], reverse=True)
+            if SWEEP_MODE:
+                # ── Sweep mode: show 7×7 coverage grid ────────
+                # Colour coding:
+                #   Grey  (#21262d) = not yet touched
+                #   Green (#1a4d2e) = touched exactly once (clean)
+                #   Orange(#4d2e00) = touched 2-3x (multi-touch)
+                #   Red   (#4d0a0a) = touched 4+ times (hardware suspect)
+                self._table.setColumnCount(7)
+                self._table.setHorizontalHeaderLabels(
+                    [f"C{c}" for c in range(7)])
+                self._table.setRowCount(7)
+                self._table.setVerticalHeaderLabels(
+                    [f"R{r}" for r in range(7)])
+                self._table.verticalHeader().setVisible(True)
 
-            self._table.setRowCount(len(sorted_words))
-            for i, (word, touches) in enumerate(sorted_words):
-                regressions = reg_dict.get(word, 0)
-                if word in flagged:
-                    status, status_color = "FLAGGED", "#f85149"
-                    row_bg = QColor("#2d0a0a")
-                elif regressions > 0:
-                    status, status_color = "Regression", "#f0883e"
-                    row_bg = QColor("#2d1a00")
-                else:
-                    status, status_color = "OK", "#3fb950"
-                    row_bg = QColor("#161b22")
+                # Build (row,col)->word lookup from get_word_from_touch
+                for r in range(7):
+                    for c in range(7):
+                        word = get_word_from_touch(r, c) or ""
+                        touches = wc.get(word, 0) if word else 0
+                        if touches == 0:
+                            bg, fg, label = "#21262d", "#484f58", word or ""
+                        elif touches == 1:
+                            bg, fg, label = "#1a4d2e", "#3fb950", word
+                        elif touches <= 3:
+                            bg, fg, label = "#4d2e00", "#f0883e", f"{word} x{touches}"
+                        else:
+                            bg, fg, label = "#4d0a0a", "#f85149", f"{word} x{touches}"
+                        item = QTableWidgetItem(label)
+                        item.setBackground(QColor(bg))
+                        item.setForeground(QColor(fg))
+                        item.setTextAlignment(Qt.AlignCenter)
+                        self._table.setItem(r, c, item)
 
-                for col_idx, text in enumerate([word, str(touches), str(regressions), status]):
-                    item = QTableWidgetItem(text)
-                    item.setForeground(QColor(status_color if col_idx == 3 else "#e6edf3"))
-                    item.setBackground(row_bg)
-                    self._table.setItem(i, col_idx, item)
+                # Coverage summary in sequence label
+                total_cells   = 49
+                touched_clean = sum(1 for w, n in wc.items() if n == 1)
+                touched_multi = sum(1 for w, n in wc.items() if n > 1)
+                not_touched   = total_cells - touched_clean - touched_multi
+                self._seq_label.setText(
+                    f"Coverage: {touched_clean}/49 clean  "
+                    f"| {touched_multi} multi-touch  "
+                    f"| {not_touched} missed"
+                )
+            else:
+                # ── Normal mode: original scoreboard table ─────
+                self._table.setColumnCount(4)
+                self._table.setHorizontalHeaderLabels(
+                    ["Word", "Touches", "Regress.", "Status"])
+                self._table.verticalHeader().setVisible(False)
+                sorted_words = sorted(wc.items(), key=lambda x: x[1], reverse=True)
+                self._table.setRowCount(len(sorted_words))
+                for i, (word, touches) in enumerate(sorted_words):
+                    regressions = reg_dict.get(word, 0)
+                    if word in flagged:
+                        status, status_color = "FLAGGED", "#f85149"
+                        row_bg = QColor("#2d0a0a")
+                    elif regressions > 0:
+                        status, status_color = "Regression", "#f0883e"
+                        row_bg = QColor("#2d1a00")
+                    else:
+                        status, status_color = "OK", "#3fb950"
+                        row_bg = QColor("#161b22")
+                    for col_idx, text in enumerate(
+                            [word, str(touches), str(regressions), status]):
+                        item = QTableWidgetItem(text)
+                        item.setForeground(
+                            QColor(status_color if col_idx == 3 else "#e6edf3"))
+                        item.setBackground(row_bg)
+                        self._table.setItem(i, col_idx, item)
 
-            seq_display = " → ".join(ws["touch_sequence"][-7:]) \
-                          if ws["touch_sequence"] else "—"
-            self._seq_label.setText(seq_display)
+                seq_display = " \u2192 ".join(ws["touch_sequence"][-7:]) \
+                              if ws["touch_sequence"] else "\u2014"
+                self._seq_label.setText(seq_display)
 
 
     # ══════════════════════════════════════════════════════════════
