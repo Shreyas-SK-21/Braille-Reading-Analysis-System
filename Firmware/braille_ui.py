@@ -232,7 +232,7 @@ CAL_FRAMES  = 10
 TX_SHIFT    = -1          # logical_col = (raw_col + TX_SHIFT) % GRID
 
 # Per-row ADC-delta thresholds — tune until idle noise stays below them
-ROW_THRESHOLDS = np.array([30, 25, 30, 30, 30, 30, 30], dtype=float)
+ROW_THRESHOLDS = np.array([50, 50, 50, 50, 50, 50, 50], dtype=float)
 
 # Re-trigger dead-time: minimum seconds before the SAME cell can register
 # a new touch event. Derived from 5-run CSV analysis: false re-triggers
