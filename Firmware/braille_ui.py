@@ -3829,7 +3829,50 @@ class DataLogger:
             except Exception:
                 pass
 
+    def export_heatmaps(self, word_count: dict, word_diff_sum: dict,
+                        welford_snap: dict, get_word_from_touch_fn) -> str:
+        """
+        Export three 7x7 heatmap CSVs at session end:
+          {ts}_tot_heatmap.csv        : mean touch duration per cell (ms)
+          {ts}_coverage_heatmap.csv   : touch count per cell (0 = skipped)
+          {ts}_difficulty_heatmap.csv : mean composite difficulty D per cell
+
+        Args:
+            word_count          : {word: int}  from WordStatsTracker._word_count
+            word_diff_sum       : {word: float} from WordStatsTracker._word_diff_sum
+            welford_snap        : {word: {n, mean, std}} from WelfordPerWord.snapshot()
+            get_word_from_touch_fn : callable(row, col) -> str|None
+
+        Returns:
+            Path to the session directory.
+        """
+        with self._lock:
+            extractors = [
+                ('tot_heatmap',
+                 lambda w: round(welford_snap[w]['mean'] * 1000, 1)
+                           if w in welford_snap and welford_snap[w]['n'] > 0
+                           else 0.0),
+                ('coverage_heatmap',
+                 lambda w: word_count.get(w, 0)),
+                ('difficulty_heatmap',
+                 lambda w: round(word_diff_sum.get(w, 0.0) / word_count[w], 4)
+                           if word_count.get(w, 0) > 0 else 0.0),
+            ]
+            for fname, extractor in extractors:
+                path = os.path.join(self._session_dir,
+                                    f'{self._ts}_{fname}.csv')
+                with open(path, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(['row', 'col', 'word', 'value'])
+                    for r in range(7):
+                        for c in range(7):
+                            word = get_word_from_touch_fn(r, c) or ''
+                            val  = extractor(word) if word else 0.0
+                            writer.writerow([r, c, word, val])
+        return self._session_dir
+
     def close(self):
+
         """Flush and close both CSV files."""
         with self._lock:
             try:
@@ -7415,6 +7458,21 @@ else:
                 )
             except Exception as e:
                 print(f"[DataLogger] Figure generation error: {e}")
+
+            # ── Export heatmap CSVs ───────────────────────────────────
+            try:
+                with word_stats._lock:
+                    _wc  = dict(word_stats._word_count)
+                    _wds = dict(word_stats._word_diff_sum)
+                _wf_snap = welford_per_word.snapshot()
+                data_logger.export_heatmaps(
+                    word_count=_wc,
+                    word_diff_sum=_wds,
+                    welford_snap=_wf_snap,
+                    get_word_from_touch_fn=get_word_from_touch,
+                )
+            except Exception as _he:
+                print(f"[DataLogger] Heatmap export failed: {_he}")
 
             # ── Close DataLogger ──────────────────────────────────
             try:
