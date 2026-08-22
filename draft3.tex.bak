@@ -409,7 +409,9 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     7$\times$7 frame to a bounded queue, a metrics thread that
     dequeues frames, runs touch detection, and updates all tracker
     objects, and a UI thread that reads metric snapshots and
-    renders the visualisation suite.  All tracker classes expose an asynchronous snapshot method to decouple high-speed sensing from UI rendering.  The pipeline is illustrated in
+    renders the visualisation suite.  All tracker classes expose a
+    thread-safe \texttt{snapshot()} method protected by
+    \texttt{threading.Lock}.  The pipeline is illustrated in
     Fig.~\ref{fig:sw_flow}.
     \begin{figure}[htbp]
     \centering
@@ -608,7 +610,33 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     % reading effort across multiple dimensions, and is visualized as the $Z$-axis in the 3D surface (panel V-3) and 
     % highlights the top-5 hardest words in the bar chart (panel V-2).
 
-    \section{Experimental Results and Discussion}
+    \subsection{Visualization Suite}
+
+    A high-performance live visualization dashboard is rendered at 30fps using PyQtGraph and PyQt5 alongside the main metrics thread.
+    Table~\ref{tab:panels} summarizes them.
+  
+\begin{table}[t]
+\caption{Live Visualization Panels}
+\label{tab:panels}
+\centering
+\begin{tabular}{clc}
+\toprule
+\textbf{ID} & \textbf{Content} & \textbf{Rate} \\
+\midrule
+V-1 & $7{\times}7$ live activation heatmap            & 30 fps \\
+V-2 & WPM, session stats, current word sidebar        & 30 fps \\
+V-3 & Word stats: touch counts, regressions           & 30 fps \\
+V-4 & Live WPM trend (raw + median-filtered EMA)      & ${\sim}$2 fps \\
+V-5 & Regression bar chart (inter-word regressions)   & ${\sim}$2 fps \\
+V-6 & 2D/3D heatmap: ToT / EWIQR difficulty           & ${\sim}$2 fps \\
+V-7 & Velocity profile overlay (last 20 + weighted mean) & ${\sim}$5 fps \\
+V-8 & Path efficiency scatter + LOWESS trend          & ${\sim}$2 fps \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+    % ---------------------------------------------------------------
+    \section{Experimental Results}
     \label{sec:results}
 
     The results presented in this section were obtained through a
@@ -620,10 +648,6 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     capability; formal user studies with visually impaired Braille
     readers remain as future work (Section~\ref{sec:limitations}).
 \begin{comment}
-    
-    \subsection{Experimental Setup and Pilot Protocol}
-    To validate the proposed hardware and multi-metric pipeline, pilot testing was conducted with sighted participants acting as proxy users. Participants were blindfolded during testing to eliminate visual feedback and strictly isolate tactile exploration, mimicking the sensory constraints of visually impaired readers. The \times7$ grid was secured to a standard desk, and participants were instructed to navigate the multi-cell word layouts at a comfortable, natural pace. Data from five structured reading sessions were collected to evaluate baseline hardware accuracy, spatial tracking fidelity, and the real-time software metric calculation.
-
     \subsection{Prototype Hardware Accuracy and Error Rates}
 
 It must be emphasized that the current hardware is a hand-assembled $7\times7$ prototype, serving as a proof-of-concept rather than a perfected commercial instrument. The manual fabrication of the copper traces and solder joints introduces physical inconsistencies, which inherently leads to a baseline of sensing errors, predominantly manifesting as phantom touches and false regressions on degraded columns. 
@@ -1021,6 +1045,105 @@ Across five structured testing runs designed to evaluate repeatability and hardw
 
     % ---------------------------------------------------------------
     \vspace{-2mm}
+    \section{Discussion}
+    \label{sec:discussion}
+
+    As noted in Section~\ref{sec:results}, all observations below derive
+    from a proof-of-concept pilot with sighted participants and should be
+    read as evidence of system capability rather than definitive
+    pedagogical findings.
+
+    \subsection{WPM and Reading Fluency}
+
+    The two-stage median$\to$EMA pipeline reduced per-frame WPM variance
+    without introducing perceptible lag, validating it as the preferred
+    estimator over simple rolling counts for a real-time readout.
+    The WPM range observed during pilot sessions is consistent with the
+    65--185\,WPM range reported for experienced readers by Knowlton and
+    Wetzel~\cite{b12}, providing a baseline for future comparative
+    studies.
+
+    \subsection{Velocity Consistency as a Learning Signal}
+
+    The EWIQR-tracked velocity IQR and the resulting $C_s$
+    (Eq.~\ref{eqn:velocity}) provide a sensitive early indicator of
+    motor consistency. The co-occurrence of low $\eta$ and high IQR
+    during hesitant reading episodes points to the same underlying motor
+    variability manifesting across two independent metrics, supporting
+    the use of $C_s$ as a lightweight proxy for reading fluency. This
+    is corroborated by Nonaka et~al.~\cite{nonaka2021}, who showed that a
+    narrowing of velocity-fluctuation variability over time directly
+    tracks improving Braille reading proficiency in longitudinal data.
+
+    \subsection{Regression Patterns and Difficulty Candidates}
+
+    Words flagged by the regression tracker (count $>3$) overlapped with
+    the high-ToT cells visible in the 3D surface (Fig.~\ref{fig:tot_3d})
+    and with the top composite difficulty scores. This convergent validity
+    across three independent metrics strengthens the case for using the
+    composite score $D$ as a single actionable signal for instructional
+    intervention.
+
+    \subsection{Skip Rate and Coverage Interpretation}
+
+    Skipped cells clustered in lower grid rows, indicating that session
+    duration, rather than intrinsic word difficulty, is the primary
+    driver of unvisited regions in short pilot sessions. Skip rate should
+    therefore be normalized by session duration when comparing across
+    participants or conditions.
+
+    \subsection{Path Efficiency and Within-Session Motor Learning}
+
+    The upward LOWESS slope observed in $\eta$ values over a session
+    demonstrates measurable within-session motor adaptation, a finding
+    consistent with motor learning theory and not previously reported for
+    tactile reading in low-cost instrumented settings.
+
+    \subsection{Composite Difficulty Score}
+
+    The composite score $D$ (Eq.~\ref{eq:difficulty}) successfully
+    aggregated the four component signals into a coherent per-word
+    difficulty ranking. Top-$k$ words ranked by $D$ were consistently
+    also top-$k$ in at least two of the four individual metrics,
+    confirming that the heuristic weights ($w_1=1.0$, $w_2=0.5$, $w_3=2.0$, $w_4=1.5$) provide a highly sensitive configuration for capturing reading effort.
+    The multi-factorial structure of $D$ is grounded in the finding of
+    Martiniello and Wittich~\cite{martiniello2022} that manual dexterity,
+    tactile sensitivity, and processing speed are independently implicated
+    in Braille reading proficiency, warranting aggregation across
+    orthogonal signal dimensions.
+
+    \subsection{Observed Reading Strategies}
+
+    The spatial and temporal touch patterns are consistent with the
+    two-handed reading strategies documented by
+    Aranyanak~\cite{b4}: the \emph{butterfly} style, in which
+    both hands begin together then split near the line midpoint, and the
+    \emph{side-by-side} style, in which both index fingers travel
+    together across each line. Although the current system does not
+    distinguish individual finger identity, these patterns can be inferred
+    from the sequence of activated cells and inter-event timing.
+    Per-finger identification (Section~\ref{sec:limitations}) would enable
+    explicit strategy classification.
+
+    \subsection{Implications for Adaptive Braille Tutoring}
+
+    The convergence of high ToT, high regression count, high velocity IQR,
+    and low $\eta$ on the same grid cells,  captured jointly by the
+    composite score $D$, provides a rich, multi-dimensional signal for
+    adaptive difficulty scheduling. A tutoring system could increase
+    exposure to high-$D$ cells and de-prioritize cells where all indicators
+    are within the proficient range. The high-$D$ word list produced by
+    our system could further serve as a content-selection signal for
+    adaptive displays such as that of Saikot and
+    Sanim~\cite{saikot2022}, which expose learners to adjustable Braille
+    cell sizes based on individual tactile sensitivity, enabling a
+    closed-loop tutoring pipeline. The systematic evidence of
+    \cite{techbraillesysrev2022} that real-time performance monitoring is
+    absent from current classroom tools confirms the practical relevance
+    of such a pipeline.
+
+    % ---------------------------------------------------------------
+    \vspace{-2mm}
     \section{Limitations and Future Work}
     \label{sec:limitations}
 
@@ -1053,7 +1176,36 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     \section{Conclusion}
     \label{sec:conclusion}
 
-    This paper presented a low-cost, non-invasive conductive grid system for real-time multi-metric analysis of Braille reading behavior. By utilizing commodity copper tape and an ESP32 microcontroller, the prototype captures spatial and temporal reading patterns---including WPM, regression rates, and a composite difficulty score---at a fraction of the cost of commercial alternatives. Pilot evaluations demonstrated the system's ability to successfully track and isolate reading hesitations and motor inconsistencies through a unified software pipeline. Future work will deploy this scalable, passive sensing platform in formal user studies with visually impaired readers to advance data-driven Braille literacy instruction.
+    This paper presented a low-cost, non-invasive conductive grid--based
+    system for real-time multi-metric analysis of Braille reading
+    behavior on a $7\times7$ sensing grid. Seven complementary
+    metrics including, rolling WPM with median-filtered EMA smoothing, EWIQR
+    velocity consistency, inter-word hesitation rate with seen-set
+    regression detection, word-level Time-on-Task, BFS-classified grid
+    skip rate, LOWESS-smoothed path efficiency, and a composite
+    difficulty score, are computed in a multi-threaded Python pipeline
+    with no wearable or optical components. An ESP32 microcontroller
+    drives multiplexed capacitive scanning and streams touch frames over
+    USB-serial to the host system. Unlike prior systems that require digitizing
+    tablets~\cite{b4}, Wiimote IR tracking~\cite{b6},
+    or wearable motion sensors~\cite{liu2024braillereader}, the proposed system operates with the reader's
+    bare hands on a standard embossed Braille page. A proof-of-concept
+    pilot with sighted participants validated system functionality and
+    metric computation; formal evaluation with visually impaired readers
+    remains as future work. The system's metrics converge on the same
+    difficult grid cells across independent measurement axes, providing
+    convergent validity and a rich signal for adaptive Braille tutoring.
+    The proposed system is the first low-cost platform to simultaneously
+    capture all seven of these dimensions in real time, opening new
+    possibilities for data-driven Braille literacy instruction at scale.
+
+    % -----------------------------------------%----------------------
+
+   
+   % \section*{Acknowledgement}
+
+    %The authors thank the participants who %volunteered for this study.
+    %\end{comment}
 
     \balance
     \bibliographystyle{ieeetr}
