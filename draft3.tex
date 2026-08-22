@@ -298,6 +298,8 @@
     \vspace{-4mm}
     \end{table}
 
+    Table~\ref{tab:comparison} provides a qualitative comparison across four practical dimensions: cost, invasiveness, real-time operation, and per-word metric granularity. No currently published system provides a directly comparable low-cost, real-time, multi-metric pipeline against which head-to-head quantitative benchmarking is possible. Our core objective was to automate a process currently performed manually---recording sessions on video and analyzing finger movement post-hoc---which is time-consuming and impractical for classroom-scale use. Quantitative benchmarking against an external reference system is planned as part of the forthcoming evaluation with visually impaired readers.
+
     % ---------------------------------------------------------------
     \section{Proposed System}
     \label{sec:solution}
@@ -322,7 +324,7 @@
 
 \subsubsection{Cost-Efficient Conductive Grid Architecture}
 
-The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip traces, providing 49 sensing locations mapped to single word positions. The physical layout is shown in Fig.~\ref{fig:hardware}. A defining feature of this prototype is its extreme cost-efficiency. The sensing grid is constructed entirely from commodity copper tape, which retails for under \$0.50 per metre. The data acquisition is driven by an ESP32 microcontroller development board, available for approximately \$4--5\,USD. The only comparatively expensive component is the pair of analog multiplexer ICs (CD4051) required for row--column switching, at roughly \$0.80\,USD total. Even with all passive components, cabling, and a perfboard, the complete hardware bill of materials is bounded at approximately \$14--18\,USD per unit. This represents a reduction of two to three orders of magnitude compared with commercial Braille reading assessment alternatives such as instrumented Perkins Braillers (\$800--\$4{,}000\,USD) or laboratory eye-tracking rigs (\$10{,}000+\,USD).
+The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip traces, providing 49 sensing locations mapped to single word positions. The physical layout is shown in Fig.~\ref{fig:hardware}. It is important to note that the $7\times7$ grid presented in this study serves as an evaluative mockup: to accurately mimic the spatial layout of an authentic embossed Braille sheet placed over the system, a single logical word is assigned across multiple contiguous sensing cells, with the number of cells proportional to the word's character length. A defining feature of this prototype is its extreme cost-efficiency. The sensing grid is constructed entirely from commodity copper tape, which retails for under \$0.50 per metre. The data acquisition is driven by an ESP32 microcontroller development board, available for approximately \$4--5\,USD. The only comparatively expensive component is the pair of analog multiplexer ICs (CD4051) required for row--column switching, at roughly \$0.80\,USD total. Even with all passive components, cabling, and a perfboard, the complete hardware bill of materials is bounded at approximately \$14--18\,USD per unit. This represents a reduction of two to three orders of magnitude compared with commercial Braille reading assessment alternatives such as instrumented Perkins Braillers (\$800--\$4{,}000\,USD) or laboratory eye-tracking rigs (\$10{,}000+\,USD).
 
     \begin{figure}[htbp]
     \centering
