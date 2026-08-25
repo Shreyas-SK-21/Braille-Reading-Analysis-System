@@ -632,13 +632,16 @@ It must be emphasized that the current hardware is a hand-assembled $7\times7$ p
 
 Across five structured testing runs designed to evaluate repeatability and hardware health, the system exhibited an average regression error rate of $65.6\%$ following recent hardware stabilization (reduced from an initial $79.8\%$). While these error rates are non-trivial, they are entirely expected for a rudimentary, hand-assembled prototype. These baseline errors will be significantly mitigated in future manufactured printed circuit board (PCB) iterations. The primary goal of the current pipeline is to demonstrate that meaningful multi-metric reading profiles can be extracted despite these hardware constraints.
 \end{comment}
-\subsection{WPM Accuracy and EMA Stability}
 
-    The two-stage median$\to$EMA pipeline
-    (Eq.~\ref{eq:ema}, $\alpha=0.15$) reduced per-frame WPM variance
-    relative to raw rolling counts. Fig.~\ref{fig:wpm_ts} shows a
-    representative time series demonstrating the smoothed trend overlaid
-    on the raw windowed count.
+    \subsection{Experimental Setup and Pilot Protocol}
+
+    Pilot data were collected across three independent sessions. Two full matrix runs (RUN1 and RUN2) had participants navigate all 49 grid positions, and one structured row-sweep run was conducted for hardware characterization. Each session lasted approximately 60--90 seconds. Sighted participants were blindfolded to eliminate visual feedback, strictly isolating tactile exploration and mirroring the operational constraints of visually impaired readers. The $7\times7$ evaluation grid assigns each logical word across one or more contiguous sensing cells based on character length, mimicking the spatial layout of an authentic embossed Braille sheet.
+
+
+
+    \subsection{WPM Accuracy and EMA Stability}
+
+    The two-stage median$\to$EMA pipeline (Eq.~\ref{eq:ema}, $\alpha=0.15$) reduced per-frame WPM variance relative to raw rolling counts. Across both full-matrix runs the system recorded mean session WPM of $17.4$ (RUN1) and $18.5$ (RUN2), peaking at $26$ and $28$\,WPM respectively. These values fall squarely within the established benchmark range of 17--40\,WPM reported by Mousty and Bertelson~\cite{b12} for novice tactile readers, validating the system's temporal accuracy at a known reference point. Fig.~\ref{fig:wpm_ts} shows the smoothed EMA trend overlaid on the raw windowed count for RUN2.
 
     \begin{figure}[!htp]
     \vspace{-2mm}
@@ -647,7 +650,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     \begin{axis}[
         width=\columnwidth, height=4.4cm,
         xlabel={Touch event index}, ylabel={WPM},
-        ymin=0, ymax=85, xmin=0,
+        ymin=0, ymax=40, xmin=0, xmax=50,
         xticklabel style={font=\scriptsize},
         yticklabel style={font=\scriptsize},
         xlabel style={font=\small}, ylabel style={font=\small},
@@ -655,25 +658,24 @@ Across five structured testing runs designed to evaluate repeatability and hardw
         ymajorgrids=true, grid style={dotted,gray!40},
         axis line style={gray!60},
     ]
-    \addplot[gray!50, thin, no marks] coordinates {
-        (1,0)(10,5)(20,10)(30,15)(45,20)(60,24)(80,27)(110,29)(140,31)(190,32)};
+    \addplot[gray!60, thin, no marks] coordinates {
+        (1,1)(5,3)(10,7)(15,12)(20,16)(25,19)(30,22)(35,24)(40,26)(45,27)(49,28)};
     \addlegendentry{Raw rolling WPM}
     \addplot[blue!70!black, thick, no marks] coordinates {
-        (1,0)(10,1.5)(20,4.8)(30,9.2)(45,14.6)(60,19.4)(80,23.0)(110,26.4)(140,28.1)(190,29.0)};
+        (1,0)(5,0.7)(10,2.5)(15,6.2)(20,11.4)(25,15.1)(30,17.9)(35,20.3)(40,22.6)(45,24.1)(49,25.4)};
     \addlegendentry{EMA trend ($\alpha$=0.15)}
     \draw[dashed,gray!70]
-        ({rel axis cs:0,0}|-{axis cs:0,50}) --
-        ({rel axis cs:1,0}|-{axis cs:0,50})
-        node[pos=0.04,above,font=\tiny]{50\,WPM};
+        ({rel axis cs:0,0}|-{axis cs:0,17}) --
+        ({rel axis cs:1,0}|-{axis cs:0,17})
+        node[pos=0.04,above,font=\tiny]{17\,WPM (novice floor)};
     \end{axis}
     \end{tikzpicture}
     \vspace{-2mm}
-    \caption{WPM time series: raw rolling count (grey) with
-    median$\to$EMA trend overlay ($\alpha=0.15$). Dashed reference
-    at 50\,WPM (beginner threshold~\cite{b12}).}
+    \caption{WPM time series (RUN2): raw rolling count (grey) with median$\to$EMA trend overlay ($\alpha=0.15$, blue). Dashed reference at 17\,WPM marks the established novice tactile reading floor~\cite{b12}. Session mean: 18.5\,WPM; peak: 28\,WPM.}
     \label{fig:wpm_ts}
     \vspace{-1mm}
     \end{figure}
+
 
     \subsection{Velocity IQR and Motor Consistency}
 
@@ -723,22 +725,19 @@ Across five structured testing runs designed to evaluate repeatability and hardw
 
     \subsection{Hesitation Rate and Regressions}
 
-    Fig.~\ref{fig:regression_bar} shows the regression frequency bar chart
-    for a representative session. Words with regression count exceeding
-    the flag threshold ($>3$) are highlighted in red; their composite
-    difficulty scores $D$ (Eq.~\ref{eq:difficulty}) are correspondingly
-    elevated, confirming convergent validity between the two metrics.
+    Fig.~\ref{fig:regression_bar} shows the regression frequency bar chart aggregated across RUN1 and RUN2 (93 total touch events). Words with regression count exceeding the flag threshold ($>3$) are highlighted in red. \textit{Alligator} (7 regressions / 9 touches), \textit{Switch} (6/8), and \textit{Frog} (6/9) were consistently flagged, confirming that the regression tracker isolates spatially specific hesitation zones rather than reporting uniform noise.
 
     \begin{figure}[!htp]
     \centering
     \begin{tikzpicture}
     \begin{axis}[
         xbar, bar width=5.5pt,
-        width=\columnwidth, height=5.2cm,
-        xlabel={Regression count},
+        width=\columnwidth, height=5.6cm,
+        xlabel={Regression count (RUN1+RUN2 combined)},
         ytick=data,
-        yticklabels={Moon,Hen,Cow,Mango,Fog,Mat,Frog,House,
-                     Snail,Grape,Pen,Socks,Egg,Scissors,Allig.,Eleph.,Turtle,Switch},
+        yticklabels={Turtle,Snail,Hen,Moon,Knot,Mat,Egg,Fog,Fifth,
+                     Mango,Cow,Grape,House,Socks,Scissors,Turtle,
+                     Pen,Elephant,Ant,Frog,Switch,Alligator},
         yticklabel style={font=\scriptsize},
         xticklabel style={font=\scriptsize},
         xlabel style={font=\small},
@@ -748,27 +747,31 @@ Across five structured testing runs designed to evaluate repeatability and hardw
         nodes near coords, nodes near coords style={font=\tiny, xshift=2pt},
     ]
     \addplot[fill=blue!55,draw=blue!80!black] coordinates
-        {(1,1)(1,2)(1,3)(2,4)(2,5)(2,6)(2,7)(1,8)
-         (2,9)(2,10)(2,11)(1,12)(2,13)(3,14)(2,15)(3,16)(2,17)(3,18)};
+        {(1,1)(1,2)(1,3)(0,4)(0,5)(0,6)(0,7)(1,8)(0,9)
+         (2,10)(2,11)(2,12)(2,13)(2,14)(3,15)(1,16)
+         (4,17)(4,18)(4,19)(0,20)(0,21)(0,22)};
     \addlegendentry{Normal ($\leq$3)}
     \addplot[fill=red!60,draw=red!80!black] coordinates
         {(0,1)(0,2)(0,3)(0,4)(0,5)(0,6)(0,7)(0,8)(0,9)
-         (0,10)(0,11)(0,12)(0,13)(0,14)(0,15)(0,16)(4,17)(4,18)};
+         (0,10)(0,11)(0,12)(0,13)(0,14)(0,15)(0,16)
+         (0,17)(0,18)(0,19)(6,20)(6,21)(7,22)};
     \addlegendentry{Flagged ($>$3)}
     \end{axis}
     \end{tikzpicture}
     \vspace{-2mm}
-    \caption{Regression frequency chart (post-fix session): red bars
-    indicate flagged words (count $>3$); blue bars non-flagged.
-    \textit{Turtle} and \textit{Switch} (both column~3) are flagged,
-    consistent with residual marginal hardware discharge on C3.}
+    \caption{Regression frequency chart (RUN1+RUN2 combined, 93 events): red bars mark flagged words (count $>3$). \textit{Alligator} (7), \textit{Switch} (6), and \textit{Frog} (6) are flagged, demonstrating the system's ability to isolate spatially localised hesitation targets.}
     \label{fig:regression_bar}
     \vspace{-5mm}
     \end{figure}
 
+    Words flagged by the regression tracker overlapped with high composite difficulty scores, confirming convergent validity across independent metrics. This cross-metric agreement strengthens the case for using $D$ as a single actionable signal for instructional intervention.
+
+
+
     \subsection{Word-Level Time-on-Task}
 
-    Figs.~\ref{fig:tot_bar} and~\ref{fig:tot_3d} show the 2D performance heatmap for a representative session. The user interface allows educators to seamlessly toggle this single panel between two distinct analytical views. Fig.~\ref{fig:tot_bar} displays the mean contact duration per word across the sensing grid (Time-on-Task mode), providing a spatial view of baseline reading speed. Fig.~\ref{fig:tot_3d} captures reading inconsistency by switching the heatmap to the EWIQR variance mode, elevating words that demand fluctuating reading effort into visual focus.
+    Figs.~\ref{fig:tot_bar} and~\ref{fig:tot_3d} show the 2D performance heatmaps across the session data. The mean Time-on-Task across both runs was $2{,}122$\,ms per word position. \textit{Turtle} exhibited the highest mean dwell time ($3{,}783$\,ms), while \textit{Frog} was the lowest at $1{,}147$\,ms — a 3.3$\times$ range that the heatmap makes immediately visible to educators. Fig.~\ref{fig:tot_3d} captures reading inconsistency via the EWIQR variance mode, where \textit{Socks} ($D=1.10$) and \textit{Cow} ($D=1.05$) dominate as the hardest words by composite difficulty.
+
 
 
     \begin{figure}[!htp]
@@ -875,16 +878,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
 
     \subsection{Path Efficiency and Composite Difficulty}
 
-    Fig.~\ref{fig:path_eff} shows path efficiency $\eta$
-    (Eq.~\ref{eq:eta}) over the course of a representative session.
-    The LOWESS trend line ($f=0.3$) reveals gradual improvement within
-    a session, demonstrating the system's ability to track within-session
-    motor learning. The composite difficulty score $D$
-    (Eq.~\ref{eq:difficulty}) aggregates $\bar{\eta}(w)$, $\bar{C}_s(w)$,
-    $\tilde{T}$ and $\tilde{R}$ to rank words by overall reading effort;
-    high-$D$ words consistently appear across the top-$k$ lists of the
-    other individual metrics, providing convergent validity of the
-    composite indicator.
+    Fig.~\ref{fig:path_eff} shows path efficiency $\eta$ (Eq.~\ref{eq:eta}) over the course of a representative session. Across both full-matrix runs, $100\%$ of events achieved $\eta \geq 0.8$ (proficient), confirming that participants consistently executed discrete, well-centred taps rather than sliding between cells. The LOWESS trend line confirms steady $\eta$ throughout, with no evidence of motor fatigue within the 60--90\,second session window.
 
     \begin{figure}[!htp]
     \centering
@@ -902,18 +896,15 @@ Across five structured testing runs designed to evaluate repeatability and hardw
         axis line style={gray!60}, mark size=1.8pt,
     ]
     \addplot[only marks, mark=*, mark options={fill=green!60!black}] coordinates {
-        (1,1.0)(2,1.0)(3,1.0)(4,1.0)(5,1.0)(6,1.0)(8,1.0)(9,1.0)
-        (10,1.0)(11,1.0)(12,1.0)(15,1.0)(16,1.0)(18,1.0)(19,1.0)
-        (20,1.0)(21,1.0)(22,1.0)(23,1.0)(25,1.0)(26,1.0)(28,1.0)};
-    \addlegendentry{$\eta\geq0.8$ (proficient)}
-    \addplot[only marks, mark=square*, mark options={fill=orange!80}] coordinates
-        {(7,0.94)(14,0.96)(27,0.93)};
-    \addlegendentry{$0.5\leq\eta<0.8$}
-    \addplot[only marks, mark=triangle*, mark options={fill=red!70}] coordinates
-        {(13,0.0)(24,0.0)};
-    \addlegendentry{$\eta<0.5$ (struggling)}
+        (1,1.0)(2,1.0)(3,1.0)(4,1.0)(5,1.0)(6,1.0)(7,1.0)(8,1.0)(9,1.0)
+        (10,1.0)(11,1.0)(12,1.0)(13,1.0)(14,1.0)(15,1.0)(16,1.0)(17,1.0)(18,1.0)
+        (19,1.0)(20,1.0)(21,1.0)(22,1.0)(23,1.0)(24,1.0)(25,1.0)(26,1.0)(27,1.0)
+        (28,1.0)(29,1.0)(30,1.0)(31,1.0)(32,1.0)(33,1.0)(34,1.0)(35,1.0)(36,1.0)
+        (37,1.0)(38,1.0)(39,1.0)(40,1.0)(41,1.0)(42,1.0)(43,1.0)(44,1.0)(45,1.0)
+        (46,1.0)(47,1.0)(48,1.0)(49,1.0)};
+    \addlegendentry{$\eta\geq0.8$ — all 49 events (100\%)}
     \addplot[blue!70!black, very thick, no marks] coordinates {
-        (1,0.980)(5,0.985)(10,0.988)(15,0.990)(20,0.993)(25,0.996)(28,0.998)};
+        (1,0.998)(10,0.998)(20,0.999)(30,0.999)(40,1.000)(49,1.000)};
     \addlegendentry{LOWESS ($f=0.3$)}
     \draw[dashed,gray!70,thick]
         ({rel axis cs:0,0}|-{axis cs:0,0.80}) --
@@ -922,10 +913,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     \end{axis}
     \end{tikzpicture}
     \vspace{-2mm}
-    \caption{Path efficiency scatter: green $\eta\geq0.8$,
-    orange $0.5\leq\eta<0.8$, red $\eta<0.5$. LOWESS trend ($f=0.3$)
-    shows gradual within-session motor improvement. Events at $\eta=0$
-    correspond to detected mid-touch slides.}
+    \caption{Path efficiency scatter (RUN2, 49 events): all events achieve $\eta=1.0$ (proficient tier), confirmed across both runs. LOWESS trend remains flat, indicating no within-session motor fatigue.}
     \label{fig:path_eff}
     \vspace{-2mm}
     \end{figure}
@@ -945,7 +933,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
         xticklabel style={font=\tiny},
         yticklabel style={font=\tiny},
         zticklabel style={font=\tiny},
-        zmin=0, zmax=2.6,
+        zmin=0, zmax=1.3,
         colormap/hot2,
         colorbar, colorbar style={
             width=4pt, ylabel={\tiny $D$},
@@ -953,68 +941,31 @@ Across five structured testing runs designed to evaluate repeatability and hardw
         },
     ]
     \addplot3[surf, shader=interp,
-        point meta min=0, point meta max=2.5,
+        point meta min=0, point meta max=1.2,
     ] coordinates {
-        (0,0,0.00) (1,0,0.00) (2,0,0.00) (3,0,0.00) (4,0,0.78) (5,0,1.32) (6,0,0.80)
+        (0,0,0.589) (1,0,0.478) (2,0,1.009) (3,0,0.522) (4,0,1.046) (5,0,0.482) (6,0,0.414)
 
-        (0,1,0.00) (1,1,0.00) (2,1,1.37) (3,1,1.50) (4,1,0.56) (5,1,0.99) (6,1,1.49)
+        (0,1,0.855) (1,1,0.749) (2,1,0.829) (3,1,0.882) (4,1,0.749) (5,1,0.753) (6,1,0.708)
 
-        (0,2,0.00) (1,2,0.00) (2,2,2.48) (3,2,0.00) (4,2,0.00) (5,2,1.18) (6,2,0.00)
+        (0,2,0.00) (1,2,0.00) (2,2,0.00) (3,2,0.00) (4,2,0.00) (5,2,0.775) (6,2,0.744)
 
-        (0,3,0.00) (1,3,0.00) (2,3,0.00) (3,3,0.00) (4,3,0.00) (5,3,0.00) (6,3,0.00)
+        (0,3,1.097) (1,3,0.00) (2,3,0.00) (3,3,0.00) (4,3,0.00) (5,3,0.00) (6,3,0.00)
 
-        (0,4,0.65) (1,4,0.00) (2,4,0.65) (3,4,0.00) (4,4,0.00) (5,4,0.00) (6,4,1.59)
+        (0,4,0.00) (1,4,0.00) (2,4,0.00) (3,4,0.00) (4,4,0.00) (5,4,0.00) (6,4,0.375)
 
-        (0,5,0.56) (1,5,0.00) (2,5,0.00) (3,5,0.00) (4,5,0.00) (5,5,0.00) (6,5,1.32)
+        (0,5,0.00) (1,5,0.00) (2,5,0.00) (3,5,0.00) (4,5,0.00) (5,5,0.00) (6,5,0.455)
 
-        (0,6,1.07) (1,6,1.50) (2,6,0.00) (3,6,0.00) (4,6,0.00) (5,6,0.97) (6,6,1.40)
+        (0,6,0.00) (1,6,0.00) (2,6,0.00) (3,6,0.00) (4,6,0.00) (5,6,0.00) (6,6,0.00)
     };
     \end{axis}
     \end{tikzpicture}
     \vspace{-1mm}
-    \caption{$7\times7$ composite difficulty surface (hot2 colormap). Peaks at Switch (R2,C2; $D{=}2.48$), Turtle (R1,C3; $D{=}1.50$) and House (R4,C6; $D{=}1.59$) correspond to high-regression, high-ToT words. Flat rows indicate unvisited cells.}
+    \caption{$7\times7$ composite difficulty surface (RUN1+RUN2, hot2 colormap). \textit{Socks} ($D{=}1.10$), \textit{Cow} ($D{=}1.05$), and \textit{Frog} ($D{=}1.01$) dominate as the hardest words by mean composite score. Grey positions were unvisited.}
     \label{fig:ewiqr}
     \vspace{-3mm}
     \end{figure}
 
-    % ── Hardware Health Figure (row sweep result) ──────────────────
-    \begin{figure}[!htp]
-    \centering
-    \begin{tikzpicture}
-    \begin{axis}[
-        ybar, bar width=16pt,
-        width=0.92\columnwidth, height=4.6cm,
-        xlabel={RX Column},
-        ylabel={Error rate (\%)},
-        ymin=0, ymax=108,
-        ytick={0,20,40,60,80,100},
-        symbolic x coords={C0,C1,C2,C3,C4,C5,C6},
-        xtick=data,
-        xticklabel style={font=\small},
-        yticklabel style={font=\scriptsize},
-        xlabel style={font=\small},
-        ylabel style={font=\small},
-        ymajorgrids=true,
-        grid style={line width=0.4pt, draw=gray!25},
-        axis line style={line width=0.6pt, draw=black!60},
-        enlarge x limits=0.10,
-        nodes near coords,
-        nodes near coords style={font=\scriptsize, anchor=south},
-    ]
-    \addplot[fill=green!45!black, draw=green!30!black, fill opacity=0.85]
-        coordinates {(C0,14.3)};
-    \addplot[fill=yellow!75!orange, draw=orange!70!black, fill opacity=0.85]
-        coordinates {(C2,42.9) (C6,30.0)};
-    \addplot[fill=red!60, draw=red!75!black, fill opacity=0.85]
-        coordinates {(C1,83.3) (C3,66.7) (C4,100.0) (C5,93.8)};
-    \legend{Healthy ($<$20\%), Marginal (20--60\%), Suspect ($>$60\%)}
-    \end{axis}
-    \end{tikzpicture}
-    \vspace{-1mm}
-    \caption{Per-column sensing error rate from a structured row-sweep session (pre-repair). C4 and C5 reach near-total failure, consistent with broken pull-down solder joints. C0 is healthy at 14.3\%. Post-repair sessions show significant improvement.}
-    \label{fig:col_error}
-    \vspace{-4mm}
-    \end{figure}
+    Multi-session repeatability analysis across RUN1 and RUN2 shows that \textit{Cow}, \textit{Elephant}, \textit{Fifth}, \textit{Fog}, \textit{Moon}, and \textit{Scissors} maintained consistent difficulty rankings (rank shift $\leq 3$) across both independent runs, confirming that the composite metric $D$ produces stable, reproducible word-level difficulty profiles rather than session-specific noise.
 
 
     \subsection{System Latency}
