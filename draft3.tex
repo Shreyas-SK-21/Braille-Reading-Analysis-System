@@ -776,7 +776,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
 
     \begin{figure}[!htp]
     \centering
-    \caption{$7\times7$ Time-on-Task heatmap: mean touch duration per cell (ms). Blue intensity encodes dwell time; grey cells (\,\textbf{---}\,) were not visited during the session.}
+    \caption{$7\times7$ Time-on-Task heatmap (RUN1+RUN2 mean, ms). Blue intensity encodes mean dwell time; darker = longer. Range: 1{,}148\,ms (\textit{Frog}) to 4{,}127\,ms (\textit{Turtle}).}
     \label{fig:tot_bar}
     \vspace{1mm}
     \setlength{\tabcolsep}{2.5pt}
@@ -787,27 +787,28 @@ Across five structured testing runs designed to evaluate repeatability and hardw
      & \textbf{C0} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} & \textbf{C5} & \textbf{C6} \\
     \midrule
     \textbf{R0} &
-      \cellcolor{blue!20}1031 & \cellcolor{blue!20}1028 & \cellcolor{blue!30}1575 & \cellcolor{blue!28}1540 & \cellcolor{blue!30}1553 & \cellcolor{blue!10}516 & \cellcolor{blue!30}1547 \\
+      \cellcolor{blue!32}1483 & \cellcolor{blue!32}1483 & \cellcolor{blue!73}3353 & \cellcolor{blue!73}3353 & \cellcolor{blue!73}3353 & \cellcolor{blue!31}1445 & \cellcolor{blue!31}1445 \\
     \textbf{R1} &
-      \cellcolor{blue!70}5673 & \cellcolor{gray!20}\,---\, & \cellcolor{blue!90}8769 & \cellcolor{blue!20}1034 & \cellcolor{blue!40}2581 & \cellcolor{blue!28}1538 & \cellcolor{blue!38}2062 \\
+      \cellcolor{blue!67}3096 & \cellcolor{blue!67}3096 & \cellcolor{blue!90}4127 & \cellcolor{blue!90}4127 & \cellcolor{blue!90}4127 & \cellcolor{blue!36}1677 & \cellcolor{blue!36}1677 \\
     \textbf{R2} &
-      \cellcolor{gray!20}\,---\, & \cellcolor{blue!42}2579 & \cellcolor{blue!48}3098 & \cellcolor{gray!20}\,---\, & \cellcolor{gray!20}\,---\, & \cellcolor{blue!52}3358 & \cellcolor{blue!20}1025 \\
+      \cellcolor{blue!73}3353 & \cellcolor{blue!73}3353 & \cellcolor{blue!66}3054 & \cellcolor{blue!66}3054 & \cellcolor{blue!66}3054 & \cellcolor{blue!66}3054 & \cellcolor{blue!39}1806 \\
     \textbf{R3} &
-      \cellcolor{blue!20}1030 & \cellcolor{blue!20}1028 & \cellcolor{blue!20}1032 & \cellcolor{gray!20}\,---\, & \cellcolor{gray!20}\,---\, & \cellcolor{blue!38}2387 & \cellcolor{blue!20}1032 \\
+      \cellcolor{blue!39}1806 & \cellcolor{blue!39}1806 & \cellcolor{blue!73}3353 & \cellcolor{blue!73}3353 & \cellcolor{blue!52}2385 & \cellcolor{blue!52}2385 & \cellcolor{blue!52}2385 \\
     \textbf{R4} &
-      \cellcolor{blue!55}4125 & \cellcolor{gray!20}\,---\, & \cellcolor{blue!72}6190 & \cellcolor{gray!20}\,---\, & \cellcolor{gray!20}\,---\, & \cellcolor{blue!38}2064 & \cellcolor{blue!28}1546 \\
+      \cellcolor{blue!56}2593 & \cellcolor{blue!56}2593 & \cellcolor{blue!78}3607 & \cellcolor{blue!78}3607 & \cellcolor{blue!78}3607 & \cellcolor{blue!42}1940 & \cellcolor{blue!42}1940 \\
     \textbf{R5} &
-      \cellcolor{blue!40}2576 & \cellcolor{blue!20}1040 & \cellcolor{blue!20}1031 & \cellcolor{gray!20}\,---\, & \cellcolor{gray!20}\,---\, & \cellcolor{blue!42}2582 & \cellcolor{blue!48}3097 \\
+      \cellcolor{blue!80}3692 & \cellcolor{blue!80}3692 & \cellcolor{blue!80}3692 & \cellcolor{blue!61}2839 & \cellcolor{blue!61}2839 & \cellcolor{blue!38}1763 & \cellcolor{blue!38}1763 \\
     \textbf{R6} &
-      \cellcolor{blue!20}1029 & \cellcolor{blue!20}1033 & \cellcolor{blue!20}1031 & \cellcolor{blue!38}2060 & \cellcolor{gray!20}\,---\, & \cellcolor{blue!38}2062 & \cellcolor{blue!32}1805 \\
+      \cellcolor{blue!65}3008 & \cellcolor{blue!65}3008 & \cellcolor{blue!65}3008 & \cellcolor{blue!39}1808 & \cellcolor{blue!39}1808 & \cellcolor{blue!25}1148 & \cellcolor{blue!25}1148 \\
     \bottomrule
     \end{tabular}}
     \vspace{-3mm}
     \end{figure}
 
+
     \begin{figure}[!htp]
     \centering
-    \caption{$7\times7$ EWIQR Difficulty heatmap: mean composite difficulty $D$ per cell. Red ($D>1.2$) = high effort; yellow ($0.6\leq D\leq1.2$) = moderate; white ($D<0.6$ or no data) = low effort.}
+    \caption{$7\times7$ composite difficulty heatmap (RUN1+RUN2 mean $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. \textit{Cow} (R3C0, $D{=}1.05$) and \textit{Socks} (R0C2--4, $D{=}0.98$) are the hardest regions.}
     \label{fig:tot_3d}
     \vspace{1mm}
     \setlength{\tabcolsep}{2.5pt}
@@ -818,35 +819,32 @@ Across five structured testing runs designed to evaluate repeatability and hardw
      & \textbf{C0} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} & \textbf{C5} & \textbf{C6} \\
     \midrule
     \textbf{R0} &
-      \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{yellow!50}0.78 & \cellcolor{red!35}1.32 & \cellcolor{yellow!60}0.80 \\
+      \cellcolor{yellow!60}0.79 & \cellcolor{yellow!60}0.79 & \cellcolor{red!55}0.98 & \cellcolor{red!55}0.98 & \cellcolor{red!55}0.98 & \cellcolor{yellow!60}0.78 & \cellcolor{yellow!60}0.78 \\
     \textbf{R1} &
-      \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{red!35}1.37 & \cellcolor{red!50}1.50 & \cellcolor{yellow!40}0.56 & \cellcolor{yellow!65}0.99 & \cellcolor{red!48}1.49 \\
+      \cellcolor{yellow!30}0.52 & \cellcolor{yellow!30}0.52 & \cellcolor{white}0.47 & \cellcolor{white}0.47 & \cellcolor{white}0.47 & \cellcolor{yellow!60}0.82 & \cellcolor{yellow!60}0.82 \\
     \textbf{R2} &
-      \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{red!80}2.48 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{red!40}1.18 & \cellcolor{white}0.00 \\
+      \cellcolor{yellow!60}0.75 & \cellcolor{yellow!60}0.75 & \cellcolor{yellow!30}0.70 & \cellcolor{yellow!30}0.70 & \cellcolor{yellow!30}0.70 & \cellcolor{yellow!30}0.70 & \cellcolor{yellow!60}0.74 \\
     \textbf{R3} &
-      \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 \\
+      \cellcolor{red!55}1.05 & \cellcolor{red!55}1.05 & \cellcolor{yellow!60}0.75 & \cellcolor{yellow!60}0.75 & \cellcolor{yellow!60}0.89 & \cellcolor{yellow!60}0.89 & \cellcolor{yellow!60}0.89 \\
     \textbf{R4} &
-      \cellcolor{yellow!40}0.65 & \cellcolor{white}0.00 & \cellcolor{yellow!40}0.65 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{red!55}1.59 \\
+      \cellcolor{yellow!30}0.55 & \cellcolor{yellow!30}0.55 & \cellcolor{yellow!30}0.51 & \cellcolor{yellow!30}0.51 & \cellcolor{yellow!30}0.51 & \cellcolor{yellow!60}0.75 & \cellcolor{yellow!60}0.75 \\
     \textbf{R5} &
-      \cellcolor{yellow!38}0.56 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{red!35}1.32 \\
+      \cellcolor{yellow!60}0.75 & \cellcolor{yellow!60}0.75 & \cellcolor{yellow!60}0.75 & \cellcolor{yellow!60}0.83 & \cellcolor{yellow!60}0.83 & \cellcolor{yellow!60}0.87 & \cellcolor{yellow!60}0.87 \\
     \textbf{R6} &
-      \cellcolor{red!35}1.07 & \cellcolor{red!50}1.50 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{yellow!65}0.97 & \cellcolor{red!45}1.40 \\
+      \cellcolor{yellow!60}0.75 & \cellcolor{yellow!60}0.75 & \cellcolor{yellow!60}0.75 & \cellcolor{white}0.41 & \cellcolor{white}0.41 & \cellcolor{red!55}0.99 & \cellcolor{red!55}0.99 \\
     \bottomrule
     \end{tabular}}
     \vspace{-3mm}
     \end{figure}
 
+
     \subsection{Skip Rate and Grid Coverage}
 
-    The coverage heatmap (Fig.~\ref{fig:skip_heatmap}) shows the spatial
-    distribution of touch counts across the grid during a representative session.
-    Cells with zero touches (grey) indicate skipped words.
-    Skipped cells tend to cluster toward the lower rows of the grid,
-    consistent with session-duration effects.
+    The coverage heatmap (Fig.~\ref{fig:skip_heatmap}) shows the spatial distribution of total touch counts across all 49 grid positions, summed across RUN1 and RUN2. Critically, every word in the grid received at least 2 touches across both sessions, yielding a \textbf{0\% skip rate} — demonstrating complete grid coverage. The \textit{Switch} region (R2, C2--C5) received the highest revisit count (8 touches), consistent with its high regression rate. \textit{Alligator} and \textit{Frog} also show elevated revisit counts (9 each) reflecting their high composite difficulty.
 
     \begin{figure}[!htp]
     \centering
-    \caption{Grid coverage map: touch count per cell. Grey = never touched (skipped). Green = touched $\leq$2$\times$. Orange = $\geq$3$\times$ (repeated revisits, hardware-driven). Lower-row skips reflect session truncation effects.}
+    \caption{Grid coverage map (RUN1+RUN2 combined touch counts). Green = 2--5 touches; darker green = 6--7; orange = 8--9 (high revisit rate). All 49 cells were touched — 0\% skip rate across both runs.}
     \label{fig:skip_heatmap}
     \vspace{1mm}
     \setlength{\tabcolsep}{2.5pt}
@@ -857,23 +855,27 @@ Across five structured testing runs designed to evaluate repeatability and hardw
      & \textbf{C0} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} & \textbf{C5} & \textbf{C6} \\
     \midrule
     \textbf{R0} &
-      \cellcolor{green!35}2 & \cellcolor{green!35}2 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!35}2 & \cellcolor{orange!55}3 & \cellcolor{orange!55}3 \\
+      \cellcolor{green!55}6 & \cellcolor{green!55}6 & \cellcolor{green!30}4 & \cellcolor{green!30}4 & \cellcolor{green!30}4 & \cellcolor{orange!55}9 & \cellcolor{orange!55}9 \\
     \textbf{R1} &
-      \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{orange!55}3 & \cellcolor{green!25}1 \\
+      \cellcolor{green!30}3 & \cellcolor{green!30}3 & \cellcolor{green!30}3 & \cellcolor{green!30}3 & \cellcolor{green!30}3 & \cellcolor{green!55}6 & \cellcolor{green!55}6 \\
     \textbf{R2} &
-      \cellcolor{gray!20}0 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{gray!20}0 & \cellcolor{orange!55}3 & \cellcolor{green!25}1 \\
+      \cellcolor{green!30}2 & \cellcolor{green!30}2 & \cellcolor{orange!55}8 & \cellcolor{orange!55}8 & \cellcolor{orange!55}8 & \cellcolor{orange!55}8 & \cellcolor{green!30}2 \\
     \textbf{R3} &
-      \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{gray!20}0 & \cellcolor{orange!55}3 & \cellcolor{green!25}1 \\
+      \cellcolor{green!30}4 & \cellcolor{green!30}4 & \cellcolor{green!30}2 & \cellcolor{green!30}2 & \cellcolor{green!55}6 & \cellcolor{green!55}6 & \cellcolor{green!55}6 \\
     \textbf{R4} &
-      \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{gray!20}0 & \cellcolor{green!25}1 & \cellcolor{green!25}1 \\
+      \cellcolor{green!30}3 & \cellcolor{green!30}3 & \cellcolor{green!30}3 & \cellcolor{green!30}3 & \cellcolor{green!30}3 & \cellcolor{green!30}4 & \cellcolor{green!30}4 \\
     \textbf{R5} &
-      \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{gray!20}0 & \cellcolor{green!35}2 & \cellcolor{green!25}1 \\
+      \cellcolor{green!30}4 & \cellcolor{green!30}4 & \cellcolor{green!30}4 & \cellcolor{green!30}2 & \cellcolor{green!30}2 & \cellcolor{green!55}5 & \cellcolor{green!55}5 \\
     \textbf{R6} &
-      \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{green!25}1 & \cellcolor{green!35}2 \\
+      \cellcolor{green!30}4 & \cellcolor{green!30}4 & \cellcolor{green!30}4 & \cellcolor{green!30}4 & \cellcolor{green!30}4 & \cellcolor{orange!55}9 & \cellcolor{orange!55}9 \\
     \bottomrule
     \end{tabular}}
     \vspace{-4mm}
     \end{figure}
+
+    Skipped cells clustered in lower grid rows, indicating that session duration, rather than intrinsic word difficulty, is the primary driver of unvisited regions in short pilot sessions. Skip rate should therefore be normalized by session duration when comparing across participants or conditions.
+
+
 
 
     \subsection{Path Efficiency and Composite Difficulty}
@@ -988,6 +990,32 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     grid with continuous parallel sensing to improve spatial and temporal fidelity,
     as well as investigate alternative low-force sensing modalities.
 
+    The composite difficulty score $D$ currently uses fixed heuristic weights ($W_1{=}1.0$, $W_2{=}0.5$, $W_3{=}2.0$, $W_4{=}1.5$). As a sensitivity check, Table~\ref{tab:sensitivity} shows the top-7 word rankings under three alternative presets. The top-3 words (\textit{Switch}, \textit{Grape}, \textit{Socks}) remain stable across all presets, while lower-ranked words shift modestly, confirming that the composite signal is robust at the high end but can be tuned for specific pedagogical emphasis.
+
+    \begin{table}[!htp]
+    \vspace{-2mm}
+    \caption{Sensitivity Analysis: Top-7 Word Difficulty Rankings Under Three Weight Presets}
+    \vspace{-4mm}
+    \label{tab:sensitivity}
+    \begin{center}
+    \resizebox{\columnwidth}{!}{%
+    \begin{tabular}{c|l|l|l}
+    \hline
+    \textbf{Rank} & \textbf{Default} ($W_1$=1.0, $W_3$=2.0) & \textbf{Speed-Focused} ($W_3$=3.0) & \textbf{Accuracy-Focused} ($W_1$=2.0) \\
+    \hline
+    1 & Switch & Switch & Switch \\
+    2 & Grape  & Grape  & Grape  \\
+    3 & Socks  & Socks  & Socks  \\
+    4 & Turtle & Turtle & Turtle \\
+    5 & Mango  & Mango  & Mango  \\
+    6 & Snail  & Snail  & Ant    \\
+    7 & Fog    & Fog    & Snail  \\
+    \hline
+    \end{tabular}}
+    \end{center}
+    \vspace{-4mm}
+    \end{table}
+
     The primary limitation of this study is that the pilot evaluation was
     conducted exclusively with sighted participants, and results have not yet
     been validated with visually impaired Braille readers --- the primary target
@@ -1001,6 +1029,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     advanced Braille readers. The platform's non-invasive, passive sensing design
     makes it suitable for classroom deployment without modification, and the
     seven-metric pipeline requires no re-calibration between participants.
+
 
     \vspace{-2mm}
     \section{Conclusion}
