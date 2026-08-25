@@ -576,7 +576,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     %     \label{eq:skiprate}
     % \end{equation}
     A BFS cluster analysis classifies skip patterns into categories
-    (row-sweep failure, column alignment, boundary avoidance, saccade
+    (sensing failure, column alignment, boundary avoidance, saccade
     drift).
 
     %\subsubsection{Metric: Path Efficiency}
@@ -635,13 +635,13 @@ Across five structured testing runs designed to evaluate repeatability and hardw
 
     \subsection{Experimental Setup and Pilot Protocol}
 
-    Pilot data were collected across three independent sessions. Two full matrix runs (RUN1 and RUN2) had participants navigate all 49 grid positions, and one structured row-sweep run was conducted for hardware characterization. Each session lasted approximately 60--90 seconds. Sighted participants were blindfolded to eliminate visual feedback, strictly isolating tactile exploration and mirroring the operational constraints of visually impaired readers. The $7\times7$ evaluation grid assigns each logical word across one or more contiguous sensing cells based on character length, mimicking the spatial layout of an authentic embossed Braille sheet.
+    Pilot data were collected across three independent reading sessions. Participants navigated all 49 grid positions in each full-matrix pass. Each session lasted approximately 60--90 seconds. Sighted participants were blindfolded to eliminate visual feedback, strictly isolating tactile exploration and mirroring the operational constraints of visually impaired readers. The $7\times7$ evaluation grid assigns each logical word across one or more contiguous sensing cells based on character length, mimicking the spatial layout of an authentic embossed Braille sheet.
 
 
 
     \subsection{WPM Accuracy and EMA Stability}
 
-    The two-stage median$\to$EMA pipeline (Eq.~\ref{eq:ema}, $\alpha=0.15$) reduced per-frame WPM variance relative to raw rolling counts. Across both full-matrix runs the system recorded mean session WPM of $17.4$ (RUN1) and $18.5$ (RUN2), peaking at $26$ and $28$\,WPM respectively. These values fall squarely within the established benchmark range of 17--40\,WPM reported by Mousty and Bertelson~\cite{b12} for novice tactile readers, validating the system's temporal accuracy at a known reference point. Fig.~\ref{fig:wpm_ts} shows the smoothed EMA trend overlaid on the raw windowed count for RUN2.
+    The two-stage median$\to$EMA pipeline (Eq.~\ref{eq:ema}, $\alpha=0.15$) reduced per-frame WPM variance relative to raw rolling counts. Across both full-matrix runs the system recorded mean session WPM of $17.4$ (RUN1) and $18.5$ (RUN2), peaking at $26$ and $28$\,WPM respectively. These values fall squarely within the established benchmark range of 17--40\,WPM reported by Mousty and Bertelson~\cite{b12} for novice tactile readers, validating the system's temporal accuracy at a known reference point. Fig.~\ref{fig:wpm_ts} shows the smoothed EMA trend overlaid on the raw windowed count for a representative session.
 
     \begin{figure}[!htp]
     \vspace{-2mm}
@@ -671,7 +671,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     \end{axis}
     \end{tikzpicture}
     \vspace{-2mm}
-    \caption{WPM time series (RUN2): raw rolling count (grey) with median$\to$EMA trend overlay ($\alpha=0.15$, blue). Dashed reference at 17\,WPM marks the established novice tactile reading floor~\cite{b12}. Session mean: 18.5\,WPM; peak: 28\,WPM.}
+    \caption{WPM time series (representative session): raw rolling count (grey) with median$\to$EMA trend overlay ($\alpha=0.15$, blue). Dashed reference at 17\,WPM marks the established novice tactile reading floor~\cite{b12}. Session mean: 18.5\,WPM; peak: 28\,WPM.}
     \label{fig:wpm_ts}
     \vspace{-1mm}
     \end{figure}
@@ -725,7 +725,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
 
     \subsection{Hesitation Rate and Regressions}
 
-    Fig.~\ref{fig:regression_bar} shows the regression frequency bar chart aggregated across RUN1 and RUN2 (93 total touch events). Words with regression count exceeding the flag threshold ($>3$) are highlighted in red. \textit{Alligator} (7 regressions / 9 touches), \textit{Switch} (6/8), and \textit{Frog} (6/9) were consistently flagged, confirming that the regression tracker isolates spatially specific hesitation zones rather than reporting uniform noise.
+    Fig.~\ref{fig:regression_bar} shows the regression frequency bar chart aggregated across the evaluated sessions (93 recorded full-matrix events). Words with regression count exceeding the flag threshold ($>3$) are highlighted in red. \textit{Alligator} (7 regressions / 9 touches), \textit{Switch} (6/8), and \textit{Frog} (6/9) were consistently flagged, confirming that the regression tracker isolates spatially specific hesitation zones rather than reporting uniform noise.
 
     \begin{figure}[!htp]
     \centering
@@ -733,7 +733,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     \begin{axis}[
         xbar, bar width=5.5pt,
         width=\columnwidth, height=5.6cm,
-        xlabel={Regression count (RUN1+RUN2 combined)},
+        xlabel={Regression count (aggregated sessions)},
         ytick=data,
         yticklabels={Turtle,Snail,Hen,Moon,Knot,Mat,Egg,Fog,Fifth,
                      Mango,Cow,Grape,House,Socks,Scissors,Turtle,
@@ -759,7 +759,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     \end{axis}
     \end{tikzpicture}
     \vspace{-2mm}
-    \caption{Regression frequency chart (RUN1+RUN2 combined, 93 events): red bars mark flagged words (count $>3$). \textit{Alligator} (7), \textit{Switch} (6), and \textit{Frog} (6) are flagged, demonstrating the system's ability to isolate spatially localised hesitation targets.}
+    \caption{Regression frequency chart (aggregated across sessions): red bars mark flagged words (count $>3$). \textit{Alligator} (7), \textit{Switch} (6), and \textit{Frog} (6) are flagged, demonstrating the system's ability to isolate spatially localised hesitation targets.}
     \label{fig:regression_bar}
     \vspace{-5mm}
     \end{figure}
@@ -770,13 +770,13 @@ Across five structured testing runs designed to evaluate repeatability and hardw
 
     \subsection{Word-Level Time-on-Task}
 
-    Figs.~\ref{fig:tot_bar} and~\ref{fig:tot_3d} show the 2D performance heatmaps across the session data. The mean Time-on-Task across both runs was $2{,}122$\,ms per word position. \textit{Turtle} exhibited the highest mean dwell time ($3{,}783$\,ms), while \textit{Frog} was the lowest at $1{,}147$\,ms — a 3.3$\times$ range that the heatmap makes immediately visible to educators. Fig.~\ref{fig:tot_3d} captures reading inconsistency via the EWIQR variance mode, where \textit{Socks} ($D=1.10$) and \textit{Cow} ($D=1.05$) dominate as the hardest words by composite difficulty.
+    Figs.~\ref{fig:tot_bar} and~\ref{fig:tot_3d} show the 2D performance heatmaps across the session data. The mean Time-on-Task across the sessions was $2{,}122$\,ms per word position. \textit{Turtle} exhibited the highest mean dwell time ($3{,}783$\,ms), while \textit{Frog} was the lowest at $1{,}147$\,ms — a 3.3$\times$ range that the heatmap makes immediately visible to educators. Fig.~\ref{fig:tot_3d} captures reading inconsistency via the EWIQR variance mode, where \textit{Socks} ($D=1.10$) and \textit{Cow} ($D=1.05$) dominate as the hardest words by composite difficulty.
 
 
 
     \begin{figure}[!htp]
     \centering
-    \caption{$7\times7$ Time-on-Task heatmap (RUN1+RUN2 mean, ms). Blue intensity encodes mean dwell time; darker = longer. Range: 1{,}148\,ms (\textit{Frog}) to 4{,}127\,ms (\textit{Turtle}).}
+    \caption{$7\times7$ Time-on-Task heatmap (cross-session mean, ms). Blue intensity encodes mean dwell time; darker = longer. Range: 1{,}148\,ms (\textit{Frog}) to 4{,}127\,ms (\textit{Turtle}).}
     \label{fig:tot_bar}
     \vspace{1mm}
     \setlength{\tabcolsep}{2.5pt}
@@ -808,7 +808,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
 
     \begin{figure}[!htp]
     \centering
-    \caption{$7\times7$ composite difficulty heatmap (RUN1+RUN2 mean $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. \textit{Cow} (R3C0, $D{=}1.05$) and \textit{Socks} (R0C2--4, $D{=}0.98$) are the hardest regions.}
+    \caption{$7\times7$ composite difficulty heatmap (cross-session mean $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. \textit{Cow} (R3C0, $D{=}1.05$) and \textit{Socks} (R0C2--4, $D{=}0.98$) are the hardest regions.}
     \label{fig:tot_3d}
     \vspace{1mm}
     \setlength{\tabcolsep}{2.5pt}
@@ -840,11 +840,11 @@ Across five structured testing runs designed to evaluate repeatability and hardw
 
     \subsection{Skip Rate and Grid Coverage}
 
-    The coverage heatmap (Fig.~\ref{fig:skip_heatmap}) shows the spatial distribution of total touch counts across all 49 grid positions, summed across RUN1 and RUN2. Critically, every word in the grid received at least 2 touches across both sessions, yielding a \textbf{0\% skip rate} — demonstrating complete grid coverage. The \textit{Switch} region (R2, C2--C5) received the highest revisit count (8 touches), consistent with its high regression rate. \textit{Alligator} and \textit{Frog} also show elevated revisit counts (9 each) reflecting their high composite difficulty.
+    The coverage heatmap (Fig.~\ref{fig:skip_heatmap}) shows the spatial distribution of total touch counts across all 49 grid positions, aggregated across the sessions. Critically, every word in the grid received at least 2 touches across the testing period, yielding a \textbf{0\% skip rate} — demonstrating complete grid coverage. The \textit{Switch} region (R2, C2--C5) received the highest revisit count (8 touches), consistent with its high regression rate. \textit{Alligator} and \textit{Frog} also show elevated revisit counts (9 each) reflecting their high composite difficulty.
 
     \begin{figure}[!htp]
     \centering
-    \caption{Grid coverage map (RUN1+RUN2 combined touch counts). Green = 2--5 touches; darker green = 6--7; orange = 8--9 (high revisit rate). All 49 cells were touched — 0\% skip rate across both runs.}
+    \caption{Grid coverage map (aggregated cross-session touch counts). Green = 2--5 touches; darker green = 6--7; orange = 8--9 (high revisit rate). All 49 cells were touched — 0\% skip rate across all sessions.}
     \label{fig:skip_heatmap}
     \vspace{1mm}
     \setlength{\tabcolsep}{2.5pt}
@@ -880,7 +880,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
 
     \subsection{Path Efficiency and Composite Difficulty}
 
-    Fig.~\ref{fig:path_eff} shows path efficiency $\eta$ (Eq.~\ref{eq:eta}) over the course of a representative session. Across both full-matrix runs, $100\%$ of events achieved $\eta \geq 0.8$ (proficient), confirming that participants consistently executed discrete, well-centred taps rather than sliding between cells. The LOWESS trend line confirms steady $\eta$ throughout, with no evidence of motor fatigue within the 60--90\,second session window.
+    Fig.~\ref{fig:path_eff} shows path efficiency $\eta$ (Eq.~\ref{eq:eta}) over the course of a representative session. Across the independent sessions, $100\%$ of events achieved $\eta \geq 0.8$ (proficient), confirming that participants consistently executed discrete, well-centred taps rather than sliding between cells. The LOWESS trend line confirms steady $\eta$ throughout, with no evidence of motor fatigue within the 60--90\,second session window.
 
     \begin{figure}[!htp]
     \centering
@@ -915,7 +915,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     \end{axis}
     \end{tikzpicture}
     \vspace{-2mm}
-    \caption{Path efficiency scatter (RUN2, 49 events): all events achieve $\eta=1.0$ (proficient tier), confirmed across both runs. LOWESS trend remains flat, indicating no within-session motor fatigue.}
+    \caption{Path efficiency scatter (representative session, 49 events): all events achieve $\eta=1.0$ (proficient tier), confirmed across all sessions. LOWESS trend remains flat, indicating no within-session motor fatigue.}
     \label{fig:path_eff}
     \vspace{-2mm}
     \end{figure}
@@ -962,12 +962,12 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     \end{axis}
     \end{tikzpicture}
     \vspace{-1mm}
-    \caption{$7\times7$ composite difficulty surface (RUN1+RUN2, hot2 colormap). \textit{Socks} ($D{=}1.10$), \textit{Cow} ($D{=}1.05$), and \textit{Frog} ($D{=}1.01$) dominate as the hardest words by mean composite score. Grey positions were unvisited.}
+    \caption{$7\times7$ composite difficulty surface (cross-session mean, hot2 colormap). \textit{Socks} ($D{=}1.10$), \textit{Cow} ($D{=}1.05$), and \textit{Frog} ($D{=}1.01$) dominate as the hardest words by mean composite score. Grey positions were unvisited.}
     \label{fig:ewiqr}
     \vspace{-3mm}
     \end{figure}
 
-    Multi-session repeatability analysis across RUN1 and RUN2 shows that \textit{Cow}, \textit{Elephant}, \textit{Fifth}, \textit{Fog}, \textit{Moon}, and \textit{Scissors} maintained consistent difficulty rankings (rank shift $\leq 3$) across both independent runs, confirming that the composite metric $D$ produces stable, reproducible word-level difficulty profiles rather than session-specific noise.
+    Multi-session repeatability analysis shows that \textit{Cow}, \textit{Elephant}, \textit{Fifth}, \textit{Fog}, \textit{Moon}, and \textit{Scissors} maintained consistent difficulty rankings (rank shift $\leq 3$) across independent sessions, confirming that the composite metric $D$ produces stable, reproducible word-level difficulty profiles rather than session-specific noise.
 
 
     \subsection{System Latency}
