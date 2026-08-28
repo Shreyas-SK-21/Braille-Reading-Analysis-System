@@ -284,7 +284,7 @@
 
 \subsubsection{Cost-Efficient Conductive Grid Architecture}
 
-The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip traces, providing 49 sensing locations mapped to single word positions. The physical layout is shown in Fig.~\ref{fig:hardware}. It is important to note that the $7\times7$ grid presented in this study serves as an evaluative mockup: to accurately mimic the spatial layout of an authentic embossed Braille sheet placed over the system, a single logical word is assigned across multiple contiguous sensing cells, with the number of cells proportional to the word's character length. A defining feature of this prototype is its extreme cost-efficiency. The sensing grid is constructed entirely from commodity copper tape, which retails for under \$0.50 per metre. The data acquisition is driven by an ESP32 microcontroller development board, available for approximately \$4--5\,USD. The only comparatively expensive component is the pair of analog multiplexer ICs (CD4051) required for row--column switching, at roughly \$0.80\,USD total. Even with all passive components, cabling, and a perfboard, the complete hardware bill of materials is bounded at approximately \$14--18\,USD per unit. This represents a reduction of two to three orders of magnitude compared with commercial Braille reading assessment alternatives such as instrumented Perkins Braillers (\$800--\$4{,}000\,USD) or laboratory eye-tracking rigs (\$10{,}000+\,USD).
+The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip traces, providing 49 sensing locations mapped to single word positions. The physical layout is shown in Fig.~\ref{fig:hardware}. It is important to note that the $7\times7$ grid presented in this study serves as an evaluative mockup: to accurately mimic the spatial layout of an authentic embossed Braille sheet placed over the system, a single logical word is assigned across multiple contiguous sensing cells, with the number of cells proportional to the word's character length. A defining feature of this prototype is its extreme cost-efficiency. The sensing grid is constructed entirely from commodity copper tape, which retails for under \$0.50 per metre. The data acquisition is driven by an ESP32 microcontroller development board, available for approximately \$4--5\,USD. The only comparatively expensive component is the pair of analog multiplexer ICs (CD4051) required for row--column switching, at roughly \$0.80\,USD total. Even with all passive components, cabling, and a perfboard, the complete hardware bill of materials is bounded at approximately \$14--18\,USD per unit. While it does not replace the spatial precision of laboratory eye-tracking rigs or high-end instrumented Perkins Braillers, this \$18 proof-of-concept provides a highly scalable, accessible alternative for resource-constrained environments (e.g., public school classrooms) where \$10,000 systems are prohibitively expensive.
 
     \begin{figure}[htbp]
     \centering
@@ -560,7 +560,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     \end{equation}
     where $\mathrm{REV}(e)$ represents the number of within-touch path direction reversals, $\mathrm{ZC}(e)$ denotes the count of zero-crossings in the velocity profile indicating hesitation, $\mathrm{VEL}(e) = \bar{v}/(\bar{v}+1)\in[0,1)$
 is a normalized speed term that increases toward unity as mean finger velocity
-$\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the event constitutes a session-level inter-word regression. The word-level difficulty $D(w)$ is then computed as the arithmetic mean of $D(e)$ for all events mapped to word $w$. In the current prototype, the heuristic weights are set to $w_1=1.0$, $w_2=0.5$, $w_3=2.0$, and $w_4=1.5$.
+$\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the event constitutes a session-level inter-word regression. The word-level difficulty $D(w)$ is then computed as the arithmetic mean of $D(e)$ for all events mapped to word $w$. In the current prototype, the heuristic weights are set to $w_1=1.0$, $w_2=0.5$, $w_3=2.0$, and $w_4=1.5$. These weights were empirically chosen during pilot trials to prioritize regression penalties. Future clinical studies will utilize machine learning models on target-population data to derive statistically validated weights.
     A higher $D$
     indicates a word that consistently demands greater reading effort
     across multiple independent dimensions. Reading difficulty variance is rendered as a switchable view in the $7\times7$ 2D performance heatmap, driven by an Exponentially Weighted Interquartile Range (EWIQR) of touch durations, which isolates current reading inconsistency.
@@ -585,7 +585,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     \subsection{Experimental Setup and Pilot Protocol}
 
-    To characterize system performance and validate the software pipeline, empirical hardware tests were conducted across full-matrix reading passes. The integrated system successfully processed continuous touch events across all 49 grid positions in real-time, yielding rich datasets for metric extraction. Sighted participants were blindfolded to eliminate visual feedback, strictly isolating tactile exploration and mirroring the operational constraints of visually impaired readers. The $7\times7$ evaluation grid assigns each logical word across one or more contiguous sensing cells based on character length, mimicking the spatial layout of an authentic embossed Braille sheet.
+    To characterize system performance and validate the software pipeline, empirical hardware tests were conducted across multiple independent reading sessions. To accommodate the variety of target words on the prototype's $7\times7$ spatial footprint, different sets of words were mapped and tested in separate passes. The integrated system successfully processed continuous touch events across all 49 grid positions in real-time, yielding rich datasets for metric extraction. Sighted participants were blindfolded to eliminate visual feedback, strictly isolating tactile exploration and mirroring the operational constraints of visually impaired readers. The $7\times7$ evaluation grid assigns each logical word across one or more contiguous sensing cells based on character length, mimicking the spatial layout of an authentic embossed Braille sheet.
 
 
 
@@ -696,7 +696,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \centering
     \includegraphics[width=0.85\columnwidth]{tot_heatmap.pdf}
     \vspace{-2mm}
-    \caption{$7\times7$ Time-on-Task heatmap (aggregated empirical data, ms). Blue intensity encodes mean dwell time; darker = longer. Variations in dwell time are visualized to pinpoint reading struggles.}
+    \caption{$7\times7$ Time-on-Task heatmap (aggregated empirical data, ms). Blue intensity encodes mean dwell time; darker = longer. Variations in dwell time are visualized to pinpoint reading struggles. \textbf{Note:} To visualize regional difficulty, cognitive metrics (such as dwell time) are aggregated at the logical word-level and projected uniformly across the spatial grid cells occupied by that word.}
     \label{fig:tot_bar}
     \vspace{-4mm}
     \end{figure}
@@ -706,7 +706,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \centering
     \includegraphics[width=0.85\columnwidth]{diff_heatmap.pdf}
     \vspace{-2mm}
-    \caption{$7\times7$ composite difficulty heatmap (aggregated empirical data $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. The metric effectively isolates the hardest regions.}
+    \caption{$7\times7$ composite difficulty heatmap (aggregated empirical data $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. The metric effectively isolates the hardest regions. \textbf{Note:} Similar to Time-on-Task, difficulty scores are aggregated at the word-level and projected onto corresponding cells.}
     \label{fig:tot_3d}
     \vspace{-4mm}
     \end{figure}
@@ -786,7 +786,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     \subsection{System Latency}
     
-    Real-time tracking requires low end-to-end system latency. The innate hardware latency of the sensing grid and ESP32 transmission, excluding the Python processing pipeline, is approximately 55-60\,ms. The Python code computation latency for touch localization, metric updates, and rendering is 33\,ms per frame. The combined end-to-end latency of 500-600\,ms is sufficiently low to provide responsive multi-metric feedback during live reading sessions.
+    Real-time tracking requires low end-to-end system latency. The innate hardware latency of the sensing grid and ESP32 transmission, excluding the Python processing pipeline, is approximately 55-60\,ms. The Python code computation latency for touch localization, metric updates, and rendering is 33\,ms per frame. The combined end-to-end latency is approximately 95\,ms, which is well below human perception thresholds for tactile feedback, ensuring highly responsive multi-metric tracking during live reading sessions.
 
     % ---------------------------------------------------------------
     \vspace{-2mm}
@@ -847,6 +847,8 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     advanced Braille readers. The platform's non-invasive, passive sensing design
     makes it suitable for classroom deployment without modification, and the
     seven-metric pipeline requires no re-calibration between participants.
+
+    An additional hardware limitation is the signal-to-noise ratio (SNR) attenuation caused by standard dielectric Braille paper (e.g., 120--160 gsm cardstock). The heavy reliance on aggressive software smoothing (such as the $\alpha = 0.15$ exponential moving average and median filters) is a deliberate engineering trade-off to compensate for this attenuation while using low-cost commodity copper tape. Formal characterization of dielectric attenuation and baseline SNR optimization without heavy software filtering is planned for the next hardware iteration.
 
 
     \vspace{-2mm}
