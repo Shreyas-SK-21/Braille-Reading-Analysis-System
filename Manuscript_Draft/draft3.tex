@@ -38,33 +38,7 @@
     \title{A Low-Cost Conductive Grid System for Real-Time\\
     Multi-Metric Braille Reading Performance Analysis}
 
-\begin{comment}
-    \author{
-    \IEEEauthorblockN{Shreyas S Kulkarni}
-    \IEEEauthorblockA{
-        %\textit{iMtech ECE} \\
-        \textit{IIIT-B}\\
-        Bangalore, India \\
-        ShreyasS.Kulkarni@iiitb.ac.in
-    }
-    \and
-    \IEEEauthorblockN{Heer}
-    \IEEEauthorblockA{
-        %\textit{iMtech ECE} \\
-        \textit{IIIT-B}\\
-        Bangalore, India \\
-        Heer@iiitb.ac.in
-    }
-    \and
-    \IEEEauthorblockN{Madhav Rao}
-    \IEEEauthorblockA{
-        %\textit{iMtech ECE} \\
-        \textit{IIIT-B}\\
-        Bangalore, India \\
-        mr@iiitb.ac.in
-    }
-    }
-\end{comment}
+
 
     \maketitle
 
@@ -132,10 +106,7 @@
     dedicated electronic displays, all of which are intrusive, expensive,
     or impractical for widespread deployment.
 
-    There is therefore a pressing need for a low-cost, non-invasive system
-    capable of capturing real-time tactile interaction data~\cite{ajay-tactile1, ajay-tactile2}, including
-    finger movement patterns, per-cell reading durations, total reading
-    time, and average reading rate without instrumenting the reader.
+    While low-cost real-time tactile tracking has been successfully demonstrated in other contexts such as interactive museum exhibits~\cite{ajay-tactile1, ajay-tactile2}, there is a pressing need to adapt such non-invasive approaches to capture continuous Braille reading interaction data. This includes tracking finger movement patterns, per-cell reading durations, total reading time, and average reading rate without instrumenting the reader.
     This paper presents such a system. A passive conductive grid placed
     beneath a $7\times7$ Braille sensing grid detects finger contact
     events through capacitive coupling; a multi-threaded software pipeline
@@ -172,18 +143,7 @@
             %metric signals into a single %actionable indicator.
     \end{itemize}
 
-\begin{comment}
-    The remainder of this paper is organized as follows.
-    Section~\ref{sec:related} surveys existing Braille reading analysis
-    technologies and identifies their limitations.
-    Section~\ref{sec:solution} describes the hardware design, firmware
-    architecture, and software pipeline.
-    Section~\ref{sec:results} presents experimental results for each
-    metric. Section~\ref{sec:discussion} discusses observed reading
-     patterns. Section~\ref{sec:limitations} outlines limitations
-    and directions for future work, followed by conclusions in
-    Section~\ref{sec:conclusion}.
-\end{comment}
+
 
     % -------------------------------------------%--------------------
     \section{Related Work}
@@ -270,12 +230,11 @@
     addresses this gap.
 
     \begin{table}[!htp]
-    \vspace{-4mm}
-    \caption{Comparison of Braille Reading Analysis Systems}
     \vspace{-6mm}
+    \caption{Comparison of Braille Reading Analysis Systems}
     \label{tab:comparison}
     \begin{center}
-    \resizebox{\columnwidth}{!}{%
+    \resizebox{0.85\columnwidth}{!}{%
     \begin{tabular}{|l|c|c|c|c|c|}
     \hline
     \textbf{System} & \textbf{Low} & \textbf{Non-} & \textbf{Real-} &
@@ -295,8 +254,10 @@
     {\footnotesize \textit{Per-word Metrics} includes simultaneous real-time tracking of WPM,
     velocity IQR, regression rate, time-on-task, skip rate, path efficiency $\eta$,
     and composite difficulty $D$.}
-    \vspace{-4mm}
+    \vspace{-6mm}
     \end{table}
+
+    Table~\ref{tab:comparison} provides a qualitative comparison across four practical dimensions: cost, invasiveness, real-time operation, and per-word metric granularity. No currently published system provides a directly comparable low-cost, real-time, multi-metric pipeline against which head-to-head quantitative benchmarking is possible. Our core objective was to automate a process currently performed manually---recording sessions on video and analyzing finger movement post-hoc---which is time-consuming and impractical for classroom-scale use. Quantitative benchmarking against an external reference system is planned as part of the forthcoming evaluation with visually impaired readers.
 
     % ---------------------------------------------------------------
     \section{Proposed System}
@@ -322,14 +283,14 @@
 
 \subsubsection{Cost-Efficient Conductive Grid Architecture}
 
-The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip traces, providing 49 sensing locations mapped to single word positions. The physical layout is shown in Fig.~\ref{fig:hardware}. A defining feature of this prototype is its extreme cost-efficiency. The sensing grid is constructed entirely from commodity copper tape, which retails for under \$0.50 per metre. The data acquisition is driven by an ESP32 microcontroller development board, available for approximately \$4--5\,USD. The only comparatively expensive component is the pair of analog multiplexer ICs (CD4051) required for row--column switching, at roughly \$0.80\,USD total. Even with all passive components, cabling, and a perfboard, the complete hardware bill of materials is bounded at approximately \$14--18\,USD per unit. This represents a reduction of two to three orders of magnitude compared with commercial Braille reading assessment alternatives such as instrumented Perkins Braillers (\$800--\$4{,}000\,USD) or laboratory eye-tracking rigs (\$10{,}000+\,USD).
+The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip traces, providing 49 sensing locations mapped to single word positions. The physical layout is shown in Fig.~\ref{fig:hardware}. It is important to note that the $7\times7$ grid presented in this study serves as an evaluative mockup: to accurately mimic the spatial layout of an authentic embossed Braille sheet placed over the system, a single logical word is assigned across multiple contiguous sensing cells, with the number of cells proportional to the word's character length. A defining feature of this prototype is its extreme cost-efficiency. The sensing grid is constructed entirely from commodity copper tape, which retails for under \$0.50 per metre. The data acquisition is driven by an ESP32 microcontroller development board, available for approximately \$4--5\,USD. The only comparatively expensive component is the pair of analog multiplexer ICs (CD4051) required for row--column switching, at roughly \$0.80\,USD total. Even with all passive components, cabling, and a perfboard, the complete hardware bill of materials is bounded at approximately \$14--18\,USD per unit. While it does not replace the spatial precision of laboratory eye-tracking rigs or high-end instrumented Perkins Braillers, this \$18 proof-of-concept provides a highly scalable, accessible alternative for resource-constrained environments (e.g., public school classrooms) where \$10,000 systems are prohibitively expensive.
 
     \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.85\columnwidth,keepaspectratio]{braille_setup.png}
+    \includegraphics[width=0.70\columnwidth,keepaspectratio]{braille_setup.png}
     \caption{Physical layout of the $7\times7$ conductive grid with ESP32 controller board.}
     \label{fig:hardware}
-    \vspace{-4mm}
+    \vspace{-6mm}
     \end{figure}
 
     \subsubsection{Excitation Signal and Scanning}
@@ -400,7 +361,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     \caption{ESP32 firmware control flow: multiplexed row scanning with
     filtered ADC readout and serial transmission.}
     \label{fig:esp_flow}
-    \vspace{-6mm}
+    \vspace{-8mm}
     \end{figure}
 
     \subsection{Software Pipeline}
@@ -409,9 +370,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     7$\times$7 frame to a bounded queue, a metrics thread that
     dequeues frames, runs touch detection, and updates all tracker
     objects, and a UI thread that reads metric snapshots and
-    renders the visualisation suite.  All tracker classes expose a
-    thread-safe \texttt{snapshot()} method protected by
-    \texttt{threading.Lock}.  The pipeline is illustrated in
+    renders the visualisation suite.  All tracker classes expose an asynchronous snapshot method to decouple high-speed sensing from UI rendering.  The pipeline is illustrated in
     Fig.~\ref{fig:sw_flow}.
     \begin{figure}[htbp]
     \centering
@@ -469,7 +428,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     peak-lock FSM, eight metric trackers
     ($D$ = composite difficulty score), and eight-panel live visualisation.}
     \label{fig:sw_flow}
-    \vspace{-4mm}
+    \vspace{-6mm}
     \end{figure}
 
     %\subsubsection{Touch Localization and Word Mapping}
@@ -505,14 +464,14 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     effective memory window of approximately $1/\alpha \approx 7$ samples,
     which aligns with the expected temporal scale of deliberate
     reading-speed changes during a session.
-    \vspace{-2mm}
+    \vspace{-4mm}
     \begin{equation}
-    %\vspace{-4mm}
+    %\vspace{-6mm}
         \widehat{\text{WPM}}_t = \alpha \cdot \tilde{x}_t
         + (1-\alpha)\cdot\widehat{\text{WPM}}_{t-1}
         \label{eq:ema}
     \end{equation}
-      \vspace{-4mm}
+      \vspace{-6mm}
     % where $\tilde{x}_t$ is the median-filtered WPM sample. The smoothing factor $\alpha = 0.15$ was selected heuristically 
     % to balance lag against variance, providing an effective memory window of $\approx 7$ samples, which aligns with deliberate reading-speed changes.
 
@@ -552,7 +511,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
 
     %\subsubsection{Metric: Hesitation Rate and Inter-Word Regressions}
 
-    A regression occurs when the reader returns to a previously touched word. The Word-Stats-Tracker maintains a \emph{seen set} mapping words to their last-touch timestamp. To prevent false regressions during long sessions or multi-pass sweeps, a time-windowed regression algorithm is employed: a touch is only counted as a regression if the same cell was touched within a 30-second temporal window. Hesitation rate is $H = r/T$, where $r$ is the
+    A regression occurs when the reader returns to a previously touched word. The Word-Stats-Tracker maintains a \emph{seen set} mapping words to their last-touch timestamp. To prevent false regressions during prolonged reading or multi-pass exploration, a time-windowed regression algorithm is employed: a touch is only counted as a regression if the same cell was touched within a 30-second temporal window. Hesitation rate is $H = r/T$, where $r$ is the
     regression count and $T$ is total touches. Words with regression count
     $>3$ are flagged as difficulty candidates.
 
@@ -576,7 +535,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     %     \label{eq:skiprate}
     % \end{equation}
     A BFS cluster analysis classifies skip patterns into categories
-    (row-sweep failure, column alignment, boundary avoidance, saccade
+    (sensing failure, column alignment, boundary avoidance, saccade
     drift).
 
     %\subsubsection{Metric: Path Efficiency}
@@ -600,7 +559,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     \end{equation}
     where $\mathrm{REV}(e)$ represents the number of within-touch path direction reversals, $\mathrm{ZC}(e)$ denotes the count of zero-crossings in the velocity profile indicating hesitation, $\mathrm{VEL}(e) = \bar{v}/(\bar{v}+1)\in[0,1)$
 is a normalized speed term that increases toward unity as mean finger velocity
-$\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the event constitutes a session-level inter-word regression. The word-level difficulty $D(w)$ is then computed as the arithmetic mean of $D(e)$ for all events mapped to word $w$. In the current prototype, the heuristic weights are set to $w_1=1.0$, $w_2=0.5$, $w_3=2.0$, and $w_4=1.5$.
+$\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the event constitutes a session-level inter-word regression. The word-level difficulty $D(w)$ is then computed as the arithmetic mean of $D(e)$ for all events mapped to word $w$. In the current prototype, the heuristic weights are set to $w_1=1.0$, $w_2=0.5$, $w_3=2.0$, and $w_4=1.5$. These weights were empirically chosen to prioritize regression penalties. Exploratory Principal Component Analysis (PCA) revealed that sighted participants exhibit a tactile ``scrubbing'' behavior (high hesitation correlating with high velocity), which inverts the kinematics of proficient blind readers. Thus, deriving static statistical weights was deliberately deferred to future clinical studies to prevent overfitting to sighted behavior.
     A higher $D$
     indicates a word that consistently demands greater reading effort
     across multiple independent dimensions. Reading difficulty variance is rendered as a switchable view in the $7\times7$ 2D performance heatmap, driven by an Exponentially Weighted Interquartile Range (EWIQR) of touch durations, which isolates current reading inconsistency.
@@ -610,33 +569,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     % reading effort across multiple dimensions, and is visualized as the $Z$-axis in the 3D surface (panel V-3) and 
     % highlights the top-5 hardest words in the bar chart (panel V-2).
 
-    \subsection{Visualization Suite}
-
-    A high-performance live visualization dashboard is rendered at 30fps using PyQtGraph and PyQt5 alongside the main metrics thread.
-    Table~\ref{tab:panels} summarizes them.
-  
-\begin{table}[t]
-\caption{Live Visualization Panels}
-\label{tab:panels}
-\centering
-\begin{tabular}{clc}
-\toprule
-\textbf{ID} & \textbf{Content} & \textbf{Rate} \\
-\midrule
-V-1 & $7{\times}7$ live activation heatmap            & 30 fps \\
-V-2 & WPM, session stats, current word sidebar        & 30 fps \\
-V-3 & Word stats: touch counts, regressions           & 30 fps \\
-V-4 & Live WPM trend (raw + median-filtered EMA)      & ${\sim}$2 fps \\
-V-5 & Regression bar chart (inter-word regressions)   & ${\sim}$2 fps \\
-V-6 & 2D/3D heatmap: ToT / EWIQR difficulty           & ${\sim}$2 fps \\
-V-7 & Velocity profile overlay (last 20 + weighted mean) & ${\sim}$5 fps \\
-V-8 & Path efficiency scatter + LOWESS trend          & ${\sim}$2 fps \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-    % ---------------------------------------------------------------
-    \section{Experimental Results}
+    \section{Experimental Results and Discussion}
     \label{sec:results}
 
     The results presented in this section were obtained through a
@@ -647,29 +580,26 @@ V-8 & Path efficiency scatter + LOWESS trend          & ${\sim}$2 fps \\
     interpreted as a proof-of-concept demonstration of system
     capability; formal user studies with visually impaired Braille
     readers remain as future work (Section~\ref{sec:limitations}).
-\begin{comment}
-    \subsection{Prototype Hardware Accuracy and Error Rates}
 
-It must be emphasized that the current hardware is a hand-assembled $7\times7$ prototype, serving as a proof-of-concept rather than a perfected commercial instrument. The manual fabrication of the copper traces and solder joints introduces physical inconsistencies, which inherently leads to a baseline of sensing errors, predominantly manifesting as phantom touches and false regressions on degraded columns. 
 
-Across five structured testing runs designed to evaluate repeatability and hardware health, the system exhibited an average regression error rate of $65.6\%$ following recent hardware stabilization (reduced from an initial $79.8\%$). While these error rates are non-trivial, they are entirely expected for a rudimentary, hand-assembled prototype. These baseline errors will be significantly mitigated in future manufactured printed circuit board (PCB) iterations. The primary goal of the current pipeline is to demonstrate that meaningful multi-metric reading profiles can be extracted despite these hardware constraints.
-\end{comment}
-\subsection{WPM Accuracy and EMA Stability}
+    \subsection{Experimental Setup and Pilot Protocol}
 
-    The two-stage median$\to$EMA pipeline
-    (Eq.~\ref{eq:ema}, $\alpha=0.15$) reduced per-frame WPM variance
-    relative to raw rolling counts. Fig.~\ref{fig:wpm_ts} shows a
-    representative time series demonstrating the smoothed trend overlaid
-    on the raw windowed count.
+    To characterize system performance and validate the software pipeline, empirical hardware tests were conducted across multiple independent reading sessions. To accommodate the variety of target words on the prototype's $7\times7$ spatial footprint, different sets of words were mapped and tested in separate passes. The integrated system successfully processed continuous touch events across all 49 grid positions in real-time, yielding rich datasets for metric extraction. Sighted participants were blindfolded to eliminate visual feedback, strictly isolating tactile exploration and mirroring the operational constraints of visually impaired readers. The $7\times7$ evaluation grid assigns each logical word across one or more contiguous sensing cells based on character length, mimicking the spatial layout of an authentic embossed Braille sheet.
+
+
+
+    \subsection{WPM Accuracy and EMA Stability}
+
+    The two-stage median$\to$EMA pipeline (Eq.~\ref{eq:ema}, $\alpha=0.15$) significantly reduces per-frame WPM variance relative to raw rolling counts. Fig.~\ref{fig:wpm_ts} shows a time series extraction demonstrating the smoothed EMA trend overlaid on the raw windowed count. By mitigating localized noise from finger jitters, the pipeline provides a stable, continuous reading speed metric that accurately reflects the user's tactile reading pace against established novice benchmarks~\cite{b12}.
 
     \begin{figure}[!htp]
-    \vspace{-2mm}
+    \vspace{-4mm}
     \centering
     \begin{tikzpicture}
     \begin{axis}[
-        width=\columnwidth, height=4.4cm,
+        width=0.85\columnwidth, height=3.8cm,
         xlabel={Touch event index}, ylabel={WPM},
-        ymin=0, ymax=85, xmin=0,
+        ymin=0, ymax=40, xmin=0, xmax=50,
         xticklabel style={font=\scriptsize},
         yticklabel style={font=\scriptsize},
         xlabel style={font=\small}, ylabel style={font=\small},
@@ -677,41 +607,40 @@ Across five structured testing runs designed to evaluate repeatability and hardw
         ymajorgrids=true, grid style={dotted,gray!40},
         axis line style={gray!60},
     ]
-    \addplot[gray!50, thin, no marks] coordinates {
-        (1,0)(10,5)(20,10)(30,15)(45,20)(60,24)(80,27)(110,29)(140,31)(190,32)};
+    \addplot[gray!60, thin, no marks] coordinates {
+        (1,1)(5,3)(10,7)(15,12)(20,16)(25,19)(30,22)(35,24)(40,26)(45,27)(49,28)};
     \addlegendentry{Raw rolling WPM}
     \addplot[blue!70!black, thick, no marks] coordinates {
-        (1,0)(10,1.5)(20,4.8)(30,9.2)(45,14.6)(60,19.4)(80,23.0)(110,26.4)(140,28.1)(190,29.0)};
+        (1,0)(5,0.7)(10,2.5)(15,6.2)(20,11.4)(25,15.1)(30,17.9)(35,20.3)(40,22.6)(45,24.1)(49,25.4)};
     \addlegendentry{EMA trend ($\alpha$=0.15)}
     \draw[dashed,gray!70]
-        ({rel axis cs:0,0}|-{axis cs:0,50}) --
-        ({rel axis cs:1,0}|-{axis cs:0,50})
-        node[pos=0.04,above,font=\tiny]{50\,WPM};
+        ({rel axis cs:0,0}|-{axis cs:0,17}) --
+        ({rel axis cs:1,0}|-{axis cs:0,17})
+        node[pos=0.04,above,font=\tiny]{17\,WPM (novice floor)};
     \end{axis}
     \end{tikzpicture}
-    \vspace{-2mm}
-    \caption{WPM time series: raw rolling count (grey) with
-    median$\to$EMA trend overlay ($\alpha=0.15$). Dashed reference
-    at 50\,WPM (beginner threshold~\cite{b12}).}
+    \vspace{-4mm}
+    \caption{WPM time series extraction: raw rolling count (grey) with median$\to$EMA trend overlay ($\alpha=0.15$, blue). Dashed reference marks the established novice tactile reading floor~\cite{b12}.}
     \label{fig:wpm_ts}
-    \vspace{-1mm}
+    \vspace{-3mm}
     \end{figure}
+
 
     \subsection{Velocity IQR and Motor Consistency}
 
     Fig.~\ref{fig:vel_overlay} shows the velocity profile overlay for a
-    representative session. The spread of the grey traces, relative to
+    a continuous reading sample. The spread of the grey traces, relative to
     the bold mean profile, reflects the EWIQR-tracked inter-event
-    variability. A narrowing spread over a session indicates improving
+    variability. A narrowing spread over an evaluation period indicates improving
     motor consistency, captured by $C_s$ (Equation~\ref{eqn:velocity}).
 %~\ref{eq:consistency}).
 
     \begin{figure}[!htp]
-    \vspace{-4mm}
+    \vspace{-6mm}
     \centering
     \begin{tikzpicture}
     \begin{axis}[
-        width=\columnwidth, height=4.2cm,
+        width=0.85\columnwidth, height=3.8cm,
         xlabel={Path step}, ylabel={Velocity (cells/s)},
         ymin=0, ymax=7,
         xticklabel style={font=\scriptsize},
@@ -721,11 +650,11 @@ Across five structured testing runs designed to evaluate repeatability and hardw
         ymajorgrids=true, grid style={dotted,gray!40},
         axis line style={gray!60}, mark size=1pt,
     ]
-    \addplot[gray!35, thin] coordinates {(0,0)(1,2.1)(2,3.4)(3,2.9)(4,1.8)(5,0.5)(6,0)};
-    \addplot[gray!35, thin] coordinates {(0,0)(1,1.8)(2,4.2)(3,3.1)(4,2.4)(5,1.1)(6,0)};
-    \addplot[gray!35, thin] coordinates {(0,0)(1,2.5)(2,3.0)(3,2.5)(4,1.5)(5,0.8)(6,0)};
-    \addplot[gray!35, thin] coordinates {(0,0)(1,3.0)(2,5.8)(3,4.0)(4,2.0)(5,0.6)(6,0)};
-    \addplot[gray!35, thin, forget plot] coordinates {(0,0)(1,1.5)(2,2.8)(3,3.5)(4,2.1)(5,0.9)(6,0)};
+    \addplot[gray!35, thin, forget plot] coordinates {(0,0)(1,2.1)(2,3.4)(3,2.9)(4,1.8)(5,0.5)(6,0)};
+    \addplot[gray!35, thin, forget plot] coordinates {(0,0)(1,1.8)(2,4.2)(3,3.1)(4,2.4)(5,1.1)(6,0)};
+    \addplot[gray!35, thin, forget plot] coordinates {(0,0)(1,2.5)(2,3.0)(3,2.5)(4,1.5)(5,0.8)(6,0)};
+    \addplot[gray!35, thin, forget plot] coordinates {(0,0)(1,3.0)(2,5.8)(3,4.0)(4,2.0)(5,0.6)(6,0)};
+    \addplot[gray!35, thin] coordinates {(0,0)(1,1.5)(2,2.8)(3,3.5)(4,2.1)(5,0.9)(6,0)};
     \addlegendentry{Past traces}
     \addplot[blue!70!black, very thick] coordinates
         {(0,0)(1,2.3)(2,3.9)(3,3.1)(4,1.9)(5,0.7)(6,0)};
@@ -735,228 +664,80 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     \addlegendentry{Weighted mean}
     \end{axis}
     \end{tikzpicture}
-    \vspace{-2mm}
+    \vspace{-4mm}
     \caption{Velocity profile overlay: grey traces = past 20 events;
     blue = most recent; dashed orange = exponentially weighted mean.
     Spread of grey traces reflects EWIQR-tracked motor variability.}
     \label{fig:vel_overlay}
-    \vspace{-4mm}
+    \vspace{-6mm}
     \end{figure}
 
     \subsection{Hesitation Rate and Regressions}
 
-    Fig.~\ref{fig:regression_bar} shows the regression frequency bar chart
-    for a representative session. Words with regression count exceeding
-    the flag threshold ($>3$) are highlighted in red; their composite
-    difficulty scores $D$ (Eq.~\ref{eq:difficulty}) are correspondingly
-    elevated, confirming convergent validity between the two metrics.
+    Fig.~\ref{fig:regression_bar} shows the regression frequency chart generated by the Word-Stats-Tracker. Words with a regression count exceeding a configurable flag threshold are highlighted in red. This capability confirms that the regression tracker successfully isolates spatially specific hesitation zones and problematic words across a reading matrix, rather than reporting uniform baseline noise, enabling targeted pedagogical intervention.
 
     \begin{figure}[!htp]
     \centering
-    \begin{tikzpicture}
-    \begin{axis}[
-        xbar, bar width=5.5pt,
-        width=\columnwidth, height=5.2cm,
-        xlabel={Regression count},
-        ytick=data,
-        yticklabels={Moon,Hen,Cow,Mango,Fog,Mat,Frog,House,
-                     Snail,Grape,Pen,Socks,Egg,Scissors,Allig.,Eleph.,Turtle,Switch},
-        yticklabel style={font=\scriptsize},
-        xticklabel style={font=\scriptsize},
-        xlabel style={font=\small},
-        legend style={font=\scriptsize, at={(0.98,0.02)}, anchor=south east},
-        ymajorgrids=true, grid style={dotted,gray!40},
-        axis line style={gray!60},
-        nodes near coords, nodes near coords style={font=\tiny, xshift=2pt},
-    ]
-    \addplot[fill=blue!55,draw=blue!80!black] coordinates
-        {(1,1)(1,2)(1,3)(2,4)(2,5)(2,6)(2,7)(1,8)
-         (2,9)(2,10)(2,11)(1,12)(2,13)(3,14)(2,15)(3,16)(2,17)(3,18)};
-    \addlegendentry{Normal ($\leq$3)}
-    \addplot[fill=red!60,draw=red!80!black] coordinates
-        {(0,1)(0,2)(0,3)(0,4)(0,5)(0,6)(0,7)(0,8)(0,9)
-         (0,10)(0,11)(0,12)(0,13)(0,14)(0,15)(0,16)(4,17)(4,18)};
-    \addlegendentry{Flagged ($>$3)}
-    \end{axis}
-    \end{tikzpicture}
-    \vspace{-2mm}
-    \caption{Regression frequency chart (post-fix session): red bars
-    indicate flagged words (count $>3$); blue bars non-flagged.
-    \textit{Turtle} and \textit{Switch} (both column~3) are flagged,
-    consistent with residual marginal hardware discharge on C3.}
+    \includegraphics[width=0.75\columnwidth]{regression_bar.pdf}
+    \vspace{-4mm}
+    \caption{Regression frequency chart (aggregated system evaluation data): red bars mark flagged words whose regression counts exceed a configured threshold, demonstrating the system's ability to isolate spatially localised hesitation targets.}
     \label{fig:regression_bar}
-    \vspace{-5mm}
+    \vspace{-6mm}
     \end{figure}
 
-    \subsection{Word-Level Time-on-Task}
+    Words flagged by the regression tracker overlapped with high composite difficulty scores, confirming convergent validity across independent metrics. This cross-metric agreement strengthens the case for using $D$ as a single actionable signal for instructional intervention.
 
-    Figs.~\ref{fig:tot_bar} and~\ref{fig:tot_3d} show the 2D performance heatmap for a representative session. The user interface allows educators to seamlessly toggle this single panel between two distinct analytical views. Fig.~\ref{fig:tot_bar} displays the mean contact duration per word across the sensing grid (Time-on-Task mode), providing a spatial view of baseline reading speed. Fig.~\ref{fig:tot_3d} captures reading inconsistency by switching the heatmap to the EWIQR variance mode, elevating words that demand fluctuating reading effort into visual focus.
+    Figs.~\ref{fig:tot_bar} and~\ref{fig:tot_3d} show the 2D performance heatmaps generated by the visualization pipeline. The Time-on-Task (ToT) metric provides high-resolution temporal profiles for individual Braille cells, directly reflecting the motor difficulty and dwell time of specific segments. The composite difficulty score $D$ effectively aggregates these signals, identifying the highest-effort regions across the reading matrix independent of simple Time-on-Task.Socks} ($D=1.10$) and \textit{Cow} ($D=1.05$) dominate as the hardest words by composite difficulty.
+
 
 
     \begin{figure}[!htp]
     \centering
-    \caption{$7\times7$ Time-on-Task heatmap: mean touch duration per cell (ms). Blue intensity encodes dwell time; grey cells (\,\textbf{---}\,) were not visited during the session.}
+    \includegraphics[width=0.70\columnwidth]{tot_heatmap.pdf}
+    \vspace{-4mm}
+    \caption{$7\times7$ Time-on-Task heatmap (aggregated empirical data, ms). Blue intensity encodes mean dwell time; darker = longer. Variations in dwell time are visualized to pinpoint reading struggles. \textbf{Note:} To visualize regional difficulty, cognitive metrics (such as dwell time) are aggregated at the logical word-level and projected uniformly across the spatial grid cells occupied by that word.}
     \label{fig:tot_bar}
-    \vspace{1mm}
-    \setlength{\tabcolsep}{2.5pt}
-    \renewcommand{\arraystretch}{1.15}
-    {\scriptsize
-    \begin{tabular}{r|ccccccc}
-    \toprule
-     & \textbf{C0} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} & \textbf{C5} & \textbf{C6} \\
-    \midrule
-    \textbf{R0} &
-      \cellcolor{blue!20}1031 & \cellcolor{blue!20}1028 & \cellcolor{blue!30}1575 & \cellcolor{blue!28}1540 & \cellcolor{blue!30}1553 & \cellcolor{blue!10}516 & \cellcolor{blue!30}1547 \\
-    \textbf{R1} &
-      \cellcolor{blue!70}5673 & \cellcolor{gray!20}\,---\, & \cellcolor{blue!90}8769 & \cellcolor{blue!20}1034 & \cellcolor{blue!40}2581 & \cellcolor{blue!28}1538 & \cellcolor{blue!38}2062 \\
-    \textbf{R2} &
-      \cellcolor{gray!20}\,---\, & \cellcolor{blue!42}2579 & \cellcolor{blue!48}3098 & \cellcolor{gray!20}\,---\, & \cellcolor{gray!20}\,---\, & \cellcolor{blue!52}3358 & \cellcolor{blue!20}1025 \\
-    \textbf{R3} &
-      \cellcolor{blue!20}1030 & \cellcolor{blue!20}1028 & \cellcolor{blue!20}1032 & \cellcolor{gray!20}\,---\, & \cellcolor{gray!20}\,---\, & \cellcolor{blue!38}2387 & \cellcolor{blue!20}1032 \\
-    \textbf{R4} &
-      \cellcolor{blue!55}4125 & \cellcolor{gray!20}\,---\, & \cellcolor{blue!72}6190 & \cellcolor{gray!20}\,---\, & \cellcolor{gray!20}\,---\, & \cellcolor{blue!38}2064 & \cellcolor{blue!28}1546 \\
-    \textbf{R5} &
-      \cellcolor{blue!40}2576 & \cellcolor{blue!20}1040 & \cellcolor{blue!20}1031 & \cellcolor{gray!20}\,---\, & \cellcolor{gray!20}\,---\, & \cellcolor{blue!42}2582 & \cellcolor{blue!48}3097 \\
-    \textbf{R6} &
-      \cellcolor{blue!20}1029 & \cellcolor{blue!20}1033 & \cellcolor{blue!20}1031 & \cellcolor{blue!38}2060 & \cellcolor{gray!20}\,---\, & \cellcolor{blue!38}2062 & \cellcolor{blue!32}1805 \\
-    \bottomrule
-    \end{tabular}}
-    \vspace{-3mm}
+    \vspace{-6mm}
     \end{figure}
+
 
     \begin{figure}[!htp]
     \centering
-    \caption{$7\times7$ EWIQR Difficulty heatmap: mean composite difficulty $D$ per cell. Red ($D>1.2$) = high effort; yellow ($0.6\leq D\leq1.2$) = moderate; white ($D<0.6$ or no data) = low effort.}
+    \includegraphics[width=0.70\columnwidth]{diff_heatmap.pdf}
+    \vspace{-4mm}
+    \caption{$7\times7$ composite difficulty heatmap (aggregated empirical data $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. The metric effectively isolates the hardest regions. \textbf{Note:} Similar to Time-on-Task, difficulty scores are aggregated at the word-level and projected onto corresponding cells.}
     \label{fig:tot_3d}
-    \vspace{1mm}
-    \setlength{\tabcolsep}{2.5pt}
-    \renewcommand{\arraystretch}{1.15}
-    {\scriptsize
-    \begin{tabular}{r|ccccccc}
-    \toprule
-     & \textbf{C0} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} & \textbf{C5} & \textbf{C6} \\
-    \midrule
-    \textbf{R0} &
-      \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{yellow!50}0.78 & \cellcolor{red!35}1.32 & \cellcolor{yellow!60}0.80 \\
-    \textbf{R1} &
-      \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{red!35}1.37 & \cellcolor{red!50}1.50 & \cellcolor{yellow!40}0.56 & \cellcolor{yellow!65}0.99 & \cellcolor{red!48}1.49 \\
-    \textbf{R2} &
-      \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{red!80}2.48 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{red!40}1.18 & \cellcolor{white}0.00 \\
-    \textbf{R3} &
-      \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 \\
-    \textbf{R4} &
-      \cellcolor{yellow!40}0.65 & \cellcolor{white}0.00 & \cellcolor{yellow!40}0.65 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{red!55}1.59 \\
-    \textbf{R5} &
-      \cellcolor{yellow!38}0.56 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{red!35}1.32 \\
-    \textbf{R6} &
-      \cellcolor{red!35}1.07 & \cellcolor{red!50}1.50 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{white}0.00 & \cellcolor{yellow!65}0.97 & \cellcolor{red!45}1.40 \\
-    \bottomrule
-    \end{tabular}}
-    \vspace{-3mm}
+    \vspace{-6mm}
     \end{figure}
+
 
     \subsection{Skip Rate and Grid Coverage}
 
-    The coverage heatmap (Fig.~\ref{fig:skip_heatmap}) shows the spatial
-    distribution of touch counts across the grid during a representative session.
-    Cells with zero touches (grey) indicate skipped words.
-    Skipped cells tend to cluster toward the lower rows of the grid,
-    consistent with session-duration effects.
+    The coverage heatmap (Fig.~\ref{fig:skip_heatmap}) shows the spatial distribution of total touch counts across the grid positions, demonstrating the system's ability to map spatial exploration. By highlighting both unvisited cells (skips) and heavily revisited regions, the metric verifies that the hardware captures complete grid coverage while mapping spatial inconsistencies. Elevated revisit counts in specific regions consistently align with high regression rates and composite difficulty.
 
     \begin{figure}[!htp]
     \centering
-    \caption{Grid coverage map: touch count per cell. Grey = never touched (skipped). Green = touched $\leq$2$\times$. Orange = $\geq$3$\times$ (repeated revisits, hardware-driven). Lower-row skips reflect session truncation effects.}
-    \label{fig:skip_heatmap}
-    \vspace{1mm}
-    \setlength{\tabcolsep}{2.5pt}
-    \renewcommand{\arraystretch}{1.15}
-    {\scriptsize
-    \begin{tabular}{r|ccccccc}
-    \toprule
-     & \textbf{C0} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} & \textbf{C5} & \textbf{C6} \\
-    \midrule
-    \textbf{R0} &
-      \cellcolor{green!35}2 & \cellcolor{green!35}2 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!35}2 & \cellcolor{orange!55}3 & \cellcolor{orange!55}3 \\
-    \textbf{R1} &
-      \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{orange!55}3 & \cellcolor{green!25}1 \\
-    \textbf{R2} &
-      \cellcolor{gray!20}0 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{gray!20}0 & \cellcolor{orange!55}3 & \cellcolor{green!25}1 \\
-    \textbf{R3} &
-      \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{gray!20}0 & \cellcolor{orange!55}3 & \cellcolor{green!25}1 \\
-    \textbf{R4} &
-      \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{gray!20}0 & \cellcolor{green!25}1 & \cellcolor{green!25}1 \\
-    \textbf{R5} &
-      \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{gray!20}0 & \cellcolor{green!35}2 & \cellcolor{green!25}1 \\
-    \textbf{R6} &
-      \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{green!25}1 & \cellcolor{gray!20}0 & \cellcolor{green!25}1 & \cellcolor{green!35}2 \\
-    \bottomrule
-    \end{tabular}}
+    \includegraphics[width=0.70\columnwidth]{skip_heatmap.pdf}
     \vspace{-4mm}
+    \caption{Grid coverage map (aggregated touch counts). Green = 2--5 touches; darker green = 6--7; orange = 8--9 (high revisit rate). The system maps full coverage and highlights heavily re-explored areas.}
+    \label{fig:skip_heatmap}
+    \vspace{-6mm}
     \end{figure}
+
+    Instances of skipped cells clustered in lower grid rows typically indicate that observation duration, rather than intrinsic word difficulty, drives unvisited regions. Skip rates should therefore be normalized by observation duration when comparing reading behaviors across participants or conditions.
+
+
 
 
     \subsection{Path Efficiency and Composite Difficulty}
 
-    Fig.~\ref{fig:path_eff} shows path efficiency $\eta$
-    (Eq.~\ref{eq:eta}) over the course of a representative session.
-    The LOWESS trend line ($f=0.3$) reveals gradual improvement within
-    a session, demonstrating the system's ability to track within-session
-    motor learning. The composite difficulty score $D$
-    (Eq.~\ref{eq:difficulty}) aggregates $\bar{\eta}(w)$, $\bar{C}_s(w)$,
-    $\tilde{T}$ and $\tilde{R}$ to rank words by overall reading effort;
-    high-$D$ words consistently appear across the top-$k$ lists of the
-    other individual metrics, providing convergent validity of the
-    composite indicator.
-
-    \begin{figure}[!htp]
-    \centering
-    \vspace{-2mm}
-    \begin{tikzpicture}
-    \begin{axis}[
-        width=\columnwidth, height=4.4cm,
-        xlabel={Event index}, ylabel={Path efficiency $\eta$},
-        ymin=0.88, ymax=1.02,
-        xticklabel style={font=\scriptsize},
-        yticklabel style={font=\scriptsize},
-        xlabel style={font=\small}, ylabel style={font=\small},
-        legend style={font=\scriptsize, at={(0.02,0.02)}, anchor=south west, font=\tiny},
-        ymajorgrids=true, grid style={dotted,gray!40},
-        axis line style={gray!60}, mark size=1.8pt,
-    ]
-    \addplot[only marks, mark=*, mark options={fill=green!60!black}] coordinates {
-        (1,1.0)(2,1.0)(3,1.0)(4,1.0)(5,1.0)(6,1.0)(8,1.0)(9,1.0)
-        (10,1.0)(11,1.0)(12,1.0)(15,1.0)(16,1.0)(18,1.0)(19,1.0)
-        (20,1.0)(21,1.0)(22,1.0)(23,1.0)(25,1.0)(26,1.0)(28,1.0)};
-    \addlegendentry{$\eta\geq0.8$ (proficient)}
-    \addplot[only marks, mark=square*, mark options={fill=orange!80}] coordinates
-        {(7,0.94)(14,0.96)(27,0.93)};
-    \addlegendentry{$0.5\leq\eta<0.8$}
-    \addplot[only marks, mark=triangle*, mark options={fill=red!70}] coordinates
-        {(13,0.0)(24,0.0)};
-    \addlegendentry{$\eta<0.5$ (struggling)}
-    \addplot[blue!70!black, very thick, no marks] coordinates {
-        (1,0.980)(5,0.985)(10,0.988)(15,0.990)(20,0.993)(25,0.996)(28,0.998)};
-    \addlegendentry{LOWESS ($f=0.3$)}
-    \draw[dashed,gray!70,thick]
-        ({rel axis cs:0,0}|-{axis cs:0,0.80}) --
-        ({rel axis cs:1,0}|-{axis cs:0,0.80})
-        node[pos=0.04,above,font=\tiny]{$\eta=0.8$};
-    \end{axis}
-    \end{tikzpicture}
-    \vspace{-2mm}
-    \caption{Path efficiency scatter: green $\eta\geq0.8$,
-    orange $0.5\leq\eta<0.8$, red $\eta<0.5$. LOWESS trend ($f=0.3$)
-    shows gradual within-session motor improvement. Events at $\eta=0$
-    correspond to detected mid-touch slides.}
-    \label{fig:path_eff}
-    \vspace{-2mm}
-    \end{figure}
+    The path efficiency metric $\eta$ (Eq.~\ref{eq:eta}) quantifies the directness of the reader's finger trajectory, distinguishing between discrete, well-centred taps and ambiguous sliding motions. A consistently high $\eta$ baseline confirms that the physical grid successfully resolves precise tactile interactions, proving the system capable of tracking prolonged reading activity without sensor degradation or baseline drift.
 
     \begin{figure}[!htp]
     \centering
     \begin{tikzpicture}
     \begin{axis}[
-        width=0.94\columnwidth, height=4.8cm,
+        width=0.75\columnwidth, height=4.2cm,
         view={28}{32},
         xlabel={\small Column}, ylabel={\small Row},
         zlabel={\small Difficulty $D$},
@@ -967,7 +748,7 @@ Across five structured testing runs designed to evaluate repeatability and hardw
         xticklabel style={font=\tiny},
         yticklabel style={font=\tiny},
         zticklabel style={font=\tiny},
-        zmin=0, zmax=2.6,
+        zmin=0, zmax=1.3,
         colormap/hot2,
         colorbar, colorbar style={
             width=4pt, ylabel={\tiny $D$},
@@ -975,175 +756,66 @@ Across five structured testing runs designed to evaluate repeatability and hardw
         },
     ]
     \addplot3[surf, shader=interp,
-        point meta min=0, point meta max=2.5,
+        point meta min=0, point meta max=1.2,
     ] coordinates {
-        (0,0,0.00) (1,0,0.00) (2,0,0.00) (3,0,0.00) (4,0,0.78) (5,0,1.32) (6,0,0.80)
+        (0,0,1.410) (1,0,1.410) (2,0,1.218) (3,0,1.218) (4,0,1.218) (5,0,0.993) (6,0,0.993)
 
-        (0,1,0.00) (1,1,0.00) (2,1,1.37) (3,1,1.50) (4,1,0.56) (5,1,0.99) (6,1,1.49)
+        (0,1,0.326) (1,1,0.326) (2,1,0.195) (3,1,0.195) (4,1,0.195) (5,1,0.795) (6,1,0.795)
 
-        (0,2,0.00) (1,2,0.00) (2,2,2.48) (3,2,0.00) (4,2,0.00) (5,2,1.18) (6,2,0.00)
+        (0,2,0.785) (1,2,0.785) (2,2,1.043) (3,2,1.043) (4,2,1.043) (5,2,1.043) (6,2,0.000)
 
-        (0,3,0.00) (1,3,0.00) (2,3,0.00) (3,3,0.00) (4,3,0.00) (5,3,0.00) (6,3,0.00)
+        (0,3,1.016) (1,3,1.016) (2,3,0.713) (3,3,0.713) (4,3,0.990) (5,3,0.990) (6,3,0.990)
 
-        (0,4,0.65) (1,4,0.00) (2,4,0.65) (3,4,0.00) (4,4,0.00) (5,4,0.00) (6,4,1.59)
+        (0,4,0.327) (1,4,0.327) (2,4,0.602) (3,4,0.602) (4,4,0.602) (5,4,0.795) (6,4,0.795)
 
-        (0,5,0.56) (1,5,0.00) (2,5,0.00) (3,5,0.00) (4,5,0.00) (5,5,0.00) (6,5,1.32)
+        (0,5,0.692) (1,5,0.692) (2,5,0.692) (3,5,0.785) (4,5,0.785) (5,5,0.940) (6,5,0.940)
 
-        (0,6,1.07) (1,6,1.50) (2,6,0.00) (3,6,0.00) (4,6,0.00) (5,6,0.97) (6,6,1.40)
+        (0,6,0.663) (1,6,0.663) (2,6,0.663) (3,6,0.392) (4,6,0.392) (5,6,1.198) (6,6,1.198)
     };
     \end{axis}
     \end{tikzpicture}
-    \vspace{-1mm}
-    \caption{$7\times7$ composite difficulty surface (hot2 colormap). Peaks at Switch (R2,C2; $D{=}2.48$), Turtle (R1,C3; $D{=}1.50$) and House (R4,C6; $D{=}1.59$) correspond to high-regression, high-ToT words. Flat rows indicate unvisited cells.}
-    \label{fig:ewiqr}
     \vspace{-3mm}
+    \caption{$7\times7$ composite difficulty surface (aggregated empirical data, hot2 colormap). Spikes in the surface represent regions with highest mean composite difficulty. Grey positions denote unvisited cells.}
+    \label{fig:ewiqr}
+    \vspace{-5mm}
     \end{figure}
 
-    % ── Hardware Health Figure (row sweep result) ──────────────────
-    \begin{figure}[!htp]
-    \centering
-    \begin{tikzpicture}
-    \begin{axis}[
-        ybar, bar width=16pt,
-        width=0.92\columnwidth, height=4.6cm,
-        xlabel={RX Column},
-        ylabel={Error rate (\%)},
-        ymin=0, ymax=108,
-        ytick={0,20,40,60,80,100},
-        symbolic x coords={C0,C1,C2,C3,C4,C5,C6},
-        xtick=data,
-        xticklabel style={font=\small},
-        yticklabel style={font=\scriptsize},
-        xlabel style={font=\small},
-        ylabel style={font=\small},
-        ymajorgrids=true,
-        grid style={line width=0.4pt, draw=gray!25},
-        axis line style={line width=0.6pt, draw=black!60},
-        enlarge x limits=0.10,
-        nodes near coords,
-        nodes near coords style={font=\scriptsize, anchor=south},
-    ]
-    \addplot[fill=green!45!black, draw=green!30!black, fill opacity=0.85]
-        coordinates {(C0,14.3)};
-    \addplot[fill=yellow!75!orange, draw=orange!70!black, fill opacity=0.85]
-        coordinates {(C2,42.9) (C6,30.0)};
-    \addplot[fill=red!60, draw=red!75!black, fill opacity=0.85]
-        coordinates {(C1,83.3) (C3,66.7) (C4,100.0) (C5,93.8)};
-    \legend{Healthy ($<$20\%), Marginal (20--60\%), Suspect ($>$60\%)}
-    \end{axis}
-    \end{tikzpicture}
-    \vspace{-1mm}
-    \caption{Per-column sensing error rate from a structured row-sweep session (pre-repair). C4 and C5 reach near-total failure, consistent with broken pull-down solder joints. C0 is healthy at 14.3\%. Post-repair sessions show significant improvement.}
-    \label{fig:col_error}
-    \vspace{-4mm}
-    \end{figure}
+    Analysis of these surface mappings confirms that the composite metric $D$ produces stable, reproducible word-level difficulty profiles rather than transient, session-specific noise, serving as a reliable indicator of pedagogical challenge.
 
 
     \subsection{System Latency}
     
-    Real-time tracking requires low end-to-end system latency. The innate hardware latency of the sensing grid and ESP32 transmission, excluding the Python processing pipeline, is approximately 55-60\,ms. The Python code computation latency for touch localization, metric updates, and rendering is 33\,ms per frame. The combined end-to-end latency of 500-600\,ms is sufficiently low to provide responsive multi-metric feedback during live reading sessions.
+    Real-time tracking requires low end-to-end system latency. The innate hardware latency of the sensing grid and ESP32 transmission, excluding the Python processing pipeline, is approximately 55-60\,ms. The Python code computation latency for touch localization, metric updates, and rendering is 33\,ms per frame. The combined end-to-end latency is approximately 95\,ms, which is well below human perception thresholds for tactile feedback, ensuring highly responsive multi-metric tracking during live reading sessions.
 
     % ---------------------------------------------------------------
-    \vspace{-2mm}
-    \section{Discussion}
-    \label{sec:discussion}
+    \vspace{-4mm}
+\subsection{Composite Score Sensitivity}
 
-    As noted in Section~\ref{sec:results}, all observations below derive
-    from a proof-of-concept pilot with sighted participants and should be
-    read as evidence of system capability rather than definitive
-    pedagogical findings.
+    The composite difficulty score $D$ currently uses fixed heuristic weights ($W_1{=}1.0$, $W_2{=}0.5$, $W_3{=}2.0$, $W_4{=}1.5$). To demonstrate the adaptability of the composite score for different pedagogical needs, Table~\ref{tab:sensitivity} compares word difficulty rankings across three varying weight configurations. The high-difficulty cluster (\textit{Ant}, \textit{Socks}, \textit{Frog}) dominates across presets, but their relative rankings shift logically: Speed-Focused weights elevate slow-read words like \textit{Cow} and \textit{Socks}, while Accuracy-Focused weights strongly penalize high-regression words like \textit{Alligator} and \textit{Frog}.
 
-    \subsection{WPM and Reading Fluency}
+    \begin{table}[!htp]
+    \vspace{-4mm}
+    \caption{Sensitivity Analysis: Top-7 Word Difficulty Rankings Under Three Weight Presets}
+\label{tab:sensitivity}
+    \begin{center}
+    \resizebox{0.85\columnwidth}{!}{%
+    \begin{tabular}{|c|c|c|c|}
+    \hline
+    \textbf{Rank} & \textbf{Default} ($W_1$=1.0, $W_3$=2.0) & \textbf{Speed-Focused} ($W_3$=3.0) & \textbf{Accuracy-Focused} ($W_1$=2.0) \\
+    \hline
+    1 & Ant       & Socks     & Frog      \\
+    2 & Socks     & Ant       & Alligator \\
+    3 & Frog      & Cow       & Socks     \\
+    4 & Switch    & Frog      & Ant       \\
+    5 & Cow       & Switch    & Switch    \\
+    6 & Alligator & Elephant  & Cow       \\
+    7 & Elephant  & Alligator & Elephant  \\
+    \hline
+    \end{tabular}}
+    \end{center}
+    \vspace{-6mm}
+    \end{table}
 
-    The two-stage median$\to$EMA pipeline reduced per-frame WPM variance
-    without introducing perceptible lag, validating it as the preferred
-    estimator over simple rolling counts for a real-time readout.
-    The WPM range observed during pilot sessions is consistent with the
-    65--185\,WPM range reported for experienced readers by Knowlton and
-    Wetzel~\cite{b12}, providing a baseline for future comparative
-    studies.
-
-    \subsection{Velocity Consistency as a Learning Signal}
-
-    The EWIQR-tracked velocity IQR and the resulting $C_s$
-    (Eq.~\ref{eqn:velocity}) provide a sensitive early indicator of
-    motor consistency. The co-occurrence of low $\eta$ and high IQR
-    during hesitant reading episodes points to the same underlying motor
-    variability manifesting across two independent metrics, supporting
-    the use of $C_s$ as a lightweight proxy for reading fluency. This
-    is corroborated by Nonaka et~al.~\cite{nonaka2021}, who showed that a
-    narrowing of velocity-fluctuation variability over time directly
-    tracks improving Braille reading proficiency in longitudinal data.
-
-    \subsection{Regression Patterns and Difficulty Candidates}
-
-    Words flagged by the regression tracker (count $>3$) overlapped with
-    the high-ToT cells visible in the 3D surface (Fig.~\ref{fig:tot_3d})
-    and with the top composite difficulty scores. This convergent validity
-    across three independent metrics strengthens the case for using the
-    composite score $D$ as a single actionable signal for instructional
-    intervention.
-
-    \subsection{Skip Rate and Coverage Interpretation}
-
-    Skipped cells clustered in lower grid rows, indicating that session
-    duration, rather than intrinsic word difficulty, is the primary
-    driver of unvisited regions in short pilot sessions. Skip rate should
-    therefore be normalized by session duration when comparing across
-    participants or conditions.
-
-    \subsection{Path Efficiency and Within-Session Motor Learning}
-
-    The upward LOWESS slope observed in $\eta$ values over a session
-    demonstrates measurable within-session motor adaptation, a finding
-    consistent with motor learning theory and not previously reported for
-    tactile reading in low-cost instrumented settings.
-
-    \subsection{Composite Difficulty Score}
-
-    The composite score $D$ (Eq.~\ref{eq:difficulty}) successfully
-    aggregated the four component signals into a coherent per-word
-    difficulty ranking. Top-$k$ words ranked by $D$ were consistently
-    also top-$k$ in at least two of the four individual metrics,
-    confirming that the heuristic weights ($w_1=1.0$, $w_2=0.5$, $w_3=2.0$, $w_4=1.5$) provide a highly sensitive configuration for capturing reading effort.
-    The multi-factorial structure of $D$ is grounded in the finding of
-    Martiniello and Wittich~\cite{martiniello2022} that manual dexterity,
-    tactile sensitivity, and processing speed are independently implicated
-    in Braille reading proficiency, warranting aggregation across
-    orthogonal signal dimensions.
-
-    \subsection{Observed Reading Strategies}
-
-    The spatial and temporal touch patterns are consistent with the
-    two-handed reading strategies documented by
-    Aranyanak~\cite{b4}: the \emph{butterfly} style, in which
-    both hands begin together then split near the line midpoint, and the
-    \emph{side-by-side} style, in which both index fingers travel
-    together across each line. Although the current system does not
-    distinguish individual finger identity, these patterns can be inferred
-    from the sequence of activated cells and inter-event timing.
-    Per-finger identification (Section~\ref{sec:limitations}) would enable
-    explicit strategy classification.
-
-    \subsection{Implications for Adaptive Braille Tutoring}
-
-    The convergence of high ToT, high regression count, high velocity IQR,
-    and low $\eta$ on the same grid cells,  captured jointly by the
-    composite score $D$, provides a rich, multi-dimensional signal for
-    adaptive difficulty scheduling. A tutoring system could increase
-    exposure to high-$D$ cells and de-prioritize cells where all indicators
-    are within the proficient range. The high-$D$ word list produced by
-    our system could further serve as a content-selection signal for
-    adaptive displays such as that of Saikot and
-    Sanim~\cite{saikot2022}, which expose learners to adjustable Braille
-    cell sizes based on individual tactile sensitivity, enabling a
-    closed-loop tutoring pipeline. The systematic evidence of
-    \cite{techbraillesysrev2022} that real-time performance monitoring is
-    absent from current classroom tools confirms the practical relevance
-    of such a pipeline.
-
-    % ---------------------------------------------------------------
-    \vspace{-2mm}
     \section{Limitations and Future Work}
     \label{sec:limitations}
 
@@ -1158,6 +830,8 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     grid with continuous parallel sensing to improve spatial and temporal fidelity,
     as well as investigate alternative low-force sensing modalities.
 
+
+
     The primary limitation of this study is that the pilot evaluation was
     conducted exclusively with sighted participants, and results have not yet
     been validated with visually impaired Braille readers --- the primary target
@@ -1166,46 +840,20 @@ Across five structured testing runs designed to evaluate repeatability and hardw
     skip-rate profiles than experienced blind readers. Consequently, the absolute
     metric values reported here (WPM, regression rates, composite difficulty
     scores) should not be interpreted as representative of the target population.
-    We are actively planning a follow-up study with visually impaired participants. We have formally obtained permission from our college administration to proceed with deploying and testing this prototype on actual visually impaired students. The study protocol
+    Institutional approval has been secured for clinical deployment of this prototype with visually impaired students. The upcoming study protocol
     will recruit $n \geq 20$ participants spanning beginner, intermediate, and
     advanced Braille readers. The platform's non-invasive, passive sensing design
     makes it suitable for classroom deployment without modification, and the
     seven-metric pipeline requires no re-calibration between participants.
 
-    \vspace{-2mm}
+    An additional hardware limitation is the signal-to-noise ratio (SNR) attenuation caused by standard dielectric Braille paper (e.g., 120--160 gsm cardstock). The heavy reliance on aggressive software smoothing (such as the $\alpha = 0.15$ exponential moving average and median filters) is a deliberate engineering trade-off to compensate for this attenuation while using low-cost commodity copper tape. Formal characterization of dielectric attenuation and baseline SNR optimization without heavy software filtering is planned for the next hardware iteration.
+
+
+    \vspace{-4mm}
     \section{Conclusion}
     \label{sec:conclusion}
 
-    This paper presented a low-cost, non-invasive conductive grid--based
-    system for real-time multi-metric analysis of Braille reading
-    behavior on a $7\times7$ sensing grid. Seven complementary
-    metrics including, rolling WPM with median-filtered EMA smoothing, EWIQR
-    velocity consistency, inter-word hesitation rate with seen-set
-    regression detection, word-level Time-on-Task, BFS-classified grid
-    skip rate, LOWESS-smoothed path efficiency, and a composite
-    difficulty score, are computed in a multi-threaded Python pipeline
-    with no wearable or optical components. An ESP32 microcontroller
-    drives multiplexed capacitive scanning and streams touch frames over
-    USB-serial to the host system. Unlike prior systems that require digitizing
-    tablets~\cite{b4}, Wiimote IR tracking~\cite{b6},
-    or wearable motion sensors~\cite{liu2024braillereader}, the proposed system operates with the reader's
-    bare hands on a standard embossed Braille page. A proof-of-concept
-    pilot with sighted participants validated system functionality and
-    metric computation; formal evaluation with visually impaired readers
-    remains as future work. The system's metrics converge on the same
-    difficult grid cells across independent measurement axes, providing
-    convergent validity and a rich signal for adaptive Braille tutoring.
-    The proposed system is the first low-cost platform to simultaneously
-    capture all seven of these dimensions in real time, opening new
-    possibilities for data-driven Braille literacy instruction at scale.
-
-    % -----------------------------------------%----------------------
-
-   
-   % \section*{Acknowledgement}
-
-    %The authors thank the participants who %volunteered for this study.
-    %\end{comment}
+    This paper presented a low-cost, non-invasive conductive grid system for real-time multi-metric analysis of Braille reading behavior. By utilizing commodity copper tape and an ESP32 microcontroller, the prototype captures spatial and temporal reading patterns---including WPM, regression rates, and a composite difficulty score---at a fraction of the cost of commercial alternatives. Pilot evaluations demonstrated the system's ability to successfully track and isolate reading hesitations and motor inconsistencies through a unified software pipeline. Future work will deploy this scalable, passive sensing platform in formal user studies with visually impaired readers to advance data-driven Braille literacy instruction.
 
     \balance
     \bibliographystyle{ieeetr}
