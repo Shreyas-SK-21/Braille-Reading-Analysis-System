@@ -599,7 +599,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
         xticklabel style={font=\scriptsize},
         yticklabel style={font=\scriptsize},
         xlabel style={font=\small}, ylabel style={font=\small},
-        legend style={font=\scriptsize, at={(0.02,0.98)}, anchor=north west},
+        legend style={font=\tiny, at={(0.02,0.98)}, anchor=north west, nodes={inner sep=1pt}, legend image post length=0.5cm},
         ymajorgrids=true, grid style={dotted,gray!40},
         axis line style={gray!60},
     ]
@@ -612,7 +612,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \draw[dashed,gray!70]
         ({rel axis cs:0,0}|-{axis cs:0,17}) --
         ({rel axis cs:1,0}|-{axis cs:0,17})
-        node[pos=0.96,above,font=\tiny]{17\,WPM (novice floor)};
+        node[pos=0.84,above,font=\tiny]{17\,WPM (novice floor)};
     \end{axis}
     \end{tikzpicture}
     \caption{WPM time series extraction: raw rolling count (grey) with median$\to$EMA trend overlay ($\alpha=0.15$, blue). Dashed reference marks the established novice tactile reading floor~\cite{b12}.}
@@ -641,7 +641,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
         xticklabel style={font=\scriptsize},
         yticklabel style={font=\scriptsize},
         xlabel style={font=\small}, ylabel style={font=\small},
-        legend style={font=\scriptsize, at={(0.02,0.98)}, anchor=north west},
+        legend style={font=\tiny, at={(0.02,0.98)}, anchor=north west, nodes={inner sep=1pt}, legend image post length=0.5cm},
         ymajorgrids=true, grid style={dotted,gray!40},
         axis line style={gray!60}, mark size=1pt,
     ]
@@ -689,7 +689,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \includegraphics[width=0.60\columnwidth]{tot_heatmap.pdf}
     \caption{$7\times7$ Time-on-Task heatmap (aggregated empirical data, ms). Blue intensity encodes mean dwell time; darker = longer. Variations in dwell time are visualized to pinpoint reading struggles. \textbf{Note:} To visualize regional difficulty, cognitive metrics (such as dwell time) are aggregated at the logical word-level and projected uniformly across the spatial grid cells occupied by that word.}
     \label{fig:tot_bar}
-    \vspace{-2mm}
+    \vspace{-6mm}
     \end{figure}
 
 
@@ -698,7 +698,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \includegraphics[width=0.60\columnwidth]{diff_heatmap.pdf}
     \caption{$7\times7$ composite difficulty heatmap (aggregated empirical data $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. The metric effectively isolates the hardest regions. \textbf{Note:} Similar to Time-on-Task, difficulty scores are aggregated at the word-level and projected onto corresponding cells.}
     \label{fig:tot_3d}
-    \vspace{-2mm}
+    \vspace{-6mm}
     \end{figure}
 
 
