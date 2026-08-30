@@ -290,7 +290,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     \includegraphics[width=0.70\columnwidth,keepaspectratio]{braille_setup.png}
     \caption{Physical layout of the $7\times7$ conductive grid with ESP32 controller board.}
     \label{fig:hardware}
-    \vspace{-6mm}
+    \vspace{-2mm}
     \end{figure}
 
     \subsubsection{Excitation Signal and Scanning}
@@ -361,7 +361,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     \caption{ESP32 firmware control flow: multiplexed row scanning with
     filtered ADC readout and serial transmission.}
     \label{fig:esp_flow}
-    \vspace{-8mm}
+    \vspace{-2mm}
     \end{figure}
 
     \subsection{Software Pipeline}
@@ -428,7 +428,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     peak-lock FSM, eight metric trackers
     ($D$ = composite difficulty score), and eight-panel live visualisation.}
     \label{fig:sw_flow}
-    \vspace{-6mm}
+    \vspace{-2mm}
     \end{figure}
 
     %\subsubsection{Touch Localization and Word Mapping}
@@ -603,7 +603,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
         xticklabel style={font=\scriptsize},
         yticklabel style={font=\scriptsize},
         xlabel style={font=\small}, ylabel style={font=\small},
-        legend style={font=\scriptsize, at={(0.98,0.98)}, anchor=north east},
+        legend style={font=\scriptsize, at={(0.02,0.98)}, anchor=north west},
         ymajorgrids=true, grid style={dotted,gray!40},
         axis line style={gray!60},
     ]
@@ -622,7 +622,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \vspace{-4mm}
     \caption{WPM time series extraction: raw rolling count (grey) with median$\to$EMA trend overlay ($\alpha=0.15$, blue). Dashed reference marks the established novice tactile reading floor~\cite{b12}.}
     \label{fig:wpm_ts}
-    \vspace{-3mm}
+    \vspace{-2mm}
     \end{figure}
 
 
@@ -646,7 +646,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
         xticklabel style={font=\scriptsize},
         yticklabel style={font=\scriptsize},
         xlabel style={font=\small}, ylabel style={font=\small},
-        legend style={font=\scriptsize, at={(0.98,0.98)}, anchor=north east},
+        legend style={font=\scriptsize, at={(0.02,0.98)}, anchor=north west},
         ymajorgrids=true, grid style={dotted,gray!40},
         axis line style={gray!60}, mark size=1pt,
     ]
@@ -669,7 +669,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     blue = most recent; dashed orange = exponentially weighted mean.
     Spread of grey traces reflects EWIQR-tracked motor variability.}
     \label{fig:vel_overlay}
-    \vspace{-6mm}
+    \vspace{-2mm}
     \end{figure}
 
     \subsection{Hesitation Rate and Regressions}
@@ -682,7 +682,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \vspace{-4mm}
     \caption{Regression frequency chart (aggregated system evaluation data): red bars mark flagged words whose regression counts exceed a configured threshold, demonstrating the system's ability to isolate spatially localised hesitation targets.}
     \label{fig:regression_bar}
-    \vspace{-6mm}
+    \vspace{-2mm}
     \end{figure}
 
     Words flagged by the regression tracker overlapped with high composite difficulty scores, confirming convergent validity across independent metrics. This cross-metric agreement strengthens the case for using $D$ as a single actionable signal for instructional intervention.
@@ -697,7 +697,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \vspace{-4mm}
     \caption{$7\times7$ Time-on-Task heatmap (aggregated empirical data, ms). Blue intensity encodes mean dwell time; darker = longer. Variations in dwell time are visualized to pinpoint reading struggles. \textbf{Note:} To visualize regional difficulty, cognitive metrics (such as dwell time) are aggregated at the logical word-level and projected uniformly across the spatial grid cells occupied by that word.}
     \label{fig:tot_bar}
-    \vspace{-6mm}
+    \vspace{-2mm}
     \end{figure}
 
 
@@ -707,7 +707,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \vspace{-4mm}
     \caption{$7\times7$ composite difficulty heatmap (aggregated empirical data $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. The metric effectively isolates the hardest regions. \textbf{Note:} Similar to Time-on-Task, difficulty scores are aggregated at the word-level and projected onto corresponding cells.}
     \label{fig:tot_3d}
-    \vspace{-6mm}
+    \vspace{-2mm}
     \end{figure}
 
 
@@ -721,7 +721,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \vspace{-4mm}
     \caption{Grid coverage map (aggregated touch counts). Light green = 1--2 touches; dark green = 3--5 (high revisit rate). The system maps full coverage and successfully highlights heavily re-explored areas without any skipped cells in this session.}
     \label{fig:skip_heatmap}
-    \vspace{-6mm}
+    \vspace{-2mm}
     \end{figure}
 
     Because this representative reading session achieved complete spatial coverage (no unvisited cells), it demonstrates the participant's thorough tactile scanning. In sessions where skipped cells cluster in lower grid rows, it typically indicates that observation duration, rather than intrinsic word difficulty, drives unvisited regions. Skip rates should therefore be normalized by observation duration when comparing reading behaviors across participants or conditions.
@@ -777,7 +777,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \vspace{-3mm}
     \caption{$7\times7$ composite difficulty surface (aggregated empirical data, hot2 colormap). Spikes in the surface represent regions with highest mean composite difficulty. Grey positions denote unvisited cells.}
     \label{fig:ewiqr}
-    \vspace{-5mm}
+    \vspace{-2mm}
     \end{figure}
 
     Analysis of these surface mappings confirms that the composite metric $D$ produces stable, reproducible word-level difficulty profiles rather than transient, session-specific noise, serving as a reliable indicator of pedagogical challenge.
