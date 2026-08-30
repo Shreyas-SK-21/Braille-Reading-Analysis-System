@@ -230,11 +230,10 @@
     addresses this gap.
 
     \begin{table}[!htp]
-    \vspace{-6mm}
     \caption{Comparison of Braille Reading Analysis Systems}
     \label{tab:comparison}
     \begin{center}
-    \resizebox{0.85\columnwidth}{!}{%
+    \resizebox{0.75\columnwidth}{!}{%
     \begin{tabular}{|l|c|c|c|c|c|}
     \hline
     \textbf{System} & \textbf{Low} & \textbf{Non-} & \textbf{Real-} &
@@ -254,7 +253,6 @@
     {\footnotesize \textit{Per-word Metrics} includes simultaneous real-time tracking of WPM,
     velocity IQR, regression rate, time-on-task, skip rate, path efficiency $\eta$,
     and composite difficulty $D$.}
-    \vspace{-6mm}
     \end{table}
 
     Table~\ref{tab:comparison} provides a qualitative comparison across four practical dimensions: cost, invasiveness, real-time operation, and per-word metric granularity. No currently published system provides a directly comparable low-cost, real-time, multi-metric pipeline against which head-to-head quantitative benchmarking is possible. Our core objective was to automate a process currently performed manually---recording sessions on video and analyzing finger movement post-hoc---which is time-consuming and impractical for classroom-scale use. Quantitative benchmarking against an external reference system is planned as part of the forthcoming evaluation with visually impaired readers.
@@ -287,7 +285,7 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
 
     \begin{figure}[htbp]
     \centering
-    \includegraphics[width=0.70\columnwidth,keepaspectratio]{braille_setup.png}
+    \includegraphics[width=0.60\columnwidth,keepaspectratio]{braille_setup.png}
     \caption{Physical layout of the $7\times7$ conductive grid with ESP32 controller board.}
     \label{fig:hardware}
     \vspace{-2mm}
@@ -464,14 +462,12 @@ The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip tr
     effective memory window of approximately $1/\alpha \approx 7$ samples,
     which aligns with the expected temporal scale of deliberate
     reading-speed changes during a session.
-    \vspace{-4mm}
     \begin{equation}
     %\vspace{-6mm}
         \widehat{\text{WPM}}_t = \alpha \cdot \tilde{x}_t
         + (1-\alpha)\cdot\widehat{\text{WPM}}_{t-1}
         \label{eq:ema}
     \end{equation}
-      \vspace{-6mm}
     % where $\tilde{x}_t$ is the median-filtered WPM sample. The smoothing factor $\alpha = 0.15$ was selected heuristically 
     % to balance lag against variance, providing an effective memory window of $\approx 7$ samples, which aligns with deliberate reading-speed changes.
 
@@ -597,7 +593,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \centering
     \begin{tikzpicture}
     \begin{axis}[
-        width=0.85\columnwidth, height=3.8cm,
+        width=0.85\columnwidth, height=3.2cm,
         xlabel={Touch event index}, ylabel={WPM},
         ymin=0, ymax=40, xmin=0, xmax=50,
         xticklabel style={font=\scriptsize},
@@ -616,10 +612,9 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \draw[dashed,gray!70]
         ({rel axis cs:0,0}|-{axis cs:0,17}) --
         ({rel axis cs:1,0}|-{axis cs:0,17})
-        node[pos=0.04,above,font=\tiny]{17\,WPM (novice floor)};
+        node[pos=0.96,above,font=\tiny]{17\,WPM (novice floor)};
     \end{axis}
     \end{tikzpicture}
-    \vspace{-4mm}
     \caption{WPM time series extraction: raw rolling count (grey) with median$\to$EMA trend overlay ($\alpha=0.15$, blue). Dashed reference marks the established novice tactile reading floor~\cite{b12}.}
     \label{fig:wpm_ts}
     \vspace{-2mm}
@@ -640,7 +635,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \centering
     \begin{tikzpicture}
     \begin{axis}[
-        width=0.85\columnwidth, height=3.8cm,
+        width=0.85\columnwidth, height=3.2cm,
         xlabel={Path step}, ylabel={Velocity (cells/s)},
         ymin=0, ymax=7,
         xticklabel style={font=\scriptsize},
@@ -664,7 +659,6 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \addlegendentry{Weighted mean}
     \end{axis}
     \end{tikzpicture}
-    \vspace{-4mm}
     \caption{Velocity profile overlay: grey traces = past 20 events;
     blue = most recent; dashed orange = exponentially weighted mean.
     Spread of grey traces reflects EWIQR-tracked motor variability.}
@@ -678,8 +672,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     \begin{figure}[!htp]
     \centering
-    \includegraphics[width=0.75\columnwidth]{regression_bar.pdf}
-    \vspace{-4mm}
+    \includegraphics[width=0.65\columnwidth]{regression_bar.pdf}
     \caption{Regression frequency chart (aggregated system evaluation data): red bars mark flagged words whose regression counts exceed a configured threshold, demonstrating the system's ability to isolate spatially localised hesitation targets.}
     \label{fig:regression_bar}
     \vspace{-2mm}
@@ -693,8 +686,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     \begin{figure}[!htp]
     \centering
-    \includegraphics[width=0.70\columnwidth]{tot_heatmap.pdf}
-    \vspace{-4mm}
+    \includegraphics[width=0.60\columnwidth]{tot_heatmap.pdf}
     \caption{$7\times7$ Time-on-Task heatmap (aggregated empirical data, ms). Blue intensity encodes mean dwell time; darker = longer. Variations in dwell time are visualized to pinpoint reading struggles. \textbf{Note:} To visualize regional difficulty, cognitive metrics (such as dwell time) are aggregated at the logical word-level and projected uniformly across the spatial grid cells occupied by that word.}
     \label{fig:tot_bar}
     \vspace{-2mm}
@@ -703,8 +695,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     \begin{figure}[!htp]
     \centering
-    \includegraphics[width=0.70\columnwidth]{diff_heatmap.pdf}
-    \vspace{-4mm}
+    \includegraphics[width=0.60\columnwidth]{diff_heatmap.pdf}
     \caption{$7\times7$ composite difficulty heatmap (aggregated empirical data $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. The metric effectively isolates the hardest regions. \textbf{Note:} Similar to Time-on-Task, difficulty scores are aggregated at the word-level and projected onto corresponding cells.}
     \label{fig:tot_3d}
     \vspace{-2mm}
@@ -717,8 +708,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     \begin{figure}[!htp]
     \centering
-    \includegraphics[width=0.70\columnwidth]{skip_heatmap.pdf}
-    \vspace{-4mm}
+    \includegraphics[width=0.60\columnwidth]{skip_heatmap.pdf}
     \caption{Grid coverage map (aggregated touch counts). Light green = 1--2 touches; dark green = 3--5 (high revisit rate). The system maps full coverage and successfully highlights heavily re-explored areas without any skipped cells in this session.}
     \label{fig:skip_heatmap}
     \vspace{-2mm}
@@ -737,7 +727,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \centering
     \begin{tikzpicture}
     \begin{axis}[
-        width=0.75\columnwidth, height=4.2cm,
+        width=0.65\columnwidth, height=3.6cm,
         view={28}{32},
         xlabel={\small Column}, ylabel={\small Row},
         zlabel={\small Difficulty $D$},
@@ -774,7 +764,6 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     };
     \end{axis}
     \end{tikzpicture}
-    \vspace{-3mm}
     \caption{$7\times7$ composite difficulty surface (aggregated empirical data, hot2 colormap). Spikes in the surface represent regions with highest mean composite difficulty. Grey positions denote unvisited cells.}
     \label{fig:ewiqr}
     \vspace{-2mm}
@@ -788,17 +777,15 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     Real-time tracking requires low end-to-end system latency. The innate hardware latency of the sensing grid and ESP32 transmission, excluding the Python processing pipeline, is approximately 55-60\,ms. The Python code computation latency for touch localization, metric updates, and rendering is 33\,ms per frame. The combined end-to-end latency is approximately 95\,ms, which is well below human perception thresholds for tactile feedback, ensuring highly responsive multi-metric tracking during live reading sessions.
 
     % ---------------------------------------------------------------
-    \vspace{-4mm}
 \subsection{Composite Score Sensitivity}
 
     The composite difficulty score $D$ currently uses fixed heuristic weights ($W_1{=}1.0$, $W_2{=}0.5$, $W_3{=}2.0$, $W_4{=}1.5$). To demonstrate the adaptability of the composite score for different pedagogical needs, Table~\ref{tab:sensitivity} compares word difficulty rankings across three varying weight configurations. The high-difficulty cluster (\textit{Ant}, \textit{Socks}, \textit{Frog}) dominates across presets, but their relative rankings shift logically: Speed-Focused weights elevate slow-read words like \textit{Cow} and \textit{Socks}, while Accuracy-Focused weights strongly penalize high-regression words like \textit{Alligator} and \textit{Frog}.
 
     \begin{table}[!htp]
-    \vspace{-4mm}
     \caption{Sensitivity Analysis: Top-7 Word Difficulty Rankings Under Three Weight Presets}
 \label{tab:sensitivity}
     \begin{center}
-    \resizebox{0.85\columnwidth}{!}{%
+    \resizebox{0.75\columnwidth}{!}{%
     \begin{tabular}{|c|c|c|c|}
     \hline
     \textbf{Rank} & \textbf{Default} ($W_1$=1.0, $W_3$=2.0) & \textbf{Speed-Focused} ($W_3$=3.0) & \textbf{Accuracy-Focused} ($W_1$=2.0) \\
@@ -813,7 +800,6 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \hline
     \end{tabular}}
     \end{center}
-    \vspace{-6mm}
     \end{table}
 
     \section{Limitations and Future Work}
@@ -849,7 +835,6 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     An additional hardware limitation is the signal-to-noise ratio (SNR) attenuation caused by standard dielectric Braille paper (e.g., 120--160 gsm cardstock). The heavy reliance on aggressive software smoothing (such as the $\alpha = 0.15$ exponential moving average and median filters) is a deliberate engineering trade-off to compensate for this attenuation while using low-cost commodity copper tape. Formal characterization of dielectric attenuation and baseline SNR optimization without heavy software filtering is planned for the next hardware iteration.
 
 
-    \vspace{-4mm}
     \section{Conclusion}
     \label{sec:conclusion}
 
