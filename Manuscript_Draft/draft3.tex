@@ -55,7 +55,7 @@
     real time. An ESP32 microcontroller drives a multiplexed row-column
     scanning architecture, streaming capacitively coupled touch frames to
     a host system over USB-serial. A multi-threaded Python pipeline
-    computes seven complementary performance metrics: rolling Words per
+    computes seven complementary performance metrics (via eight concurrent tracker objects): rolling Words per
     Minute (WPM) with exponential moving average smoothing, velocity
     profile inter-quartile range (IQR) as a motor-consistency indicator,
     inter-word regression rate and hesitation analysis, word-level
@@ -101,7 +101,7 @@
 
     Knowlton and Wetzel~\cite{b12} reported a mean Braille reading speed
     of 136 words per minute (WPM) for experienced readers in controlled
-    reading tasks, with a range of 65--185\,WPM. While some literature claims that highly proficient readers can achieve rates between 200 and 400\,WPM~\cite{legge1999}, reflecting the upper tail of expert performance, beginners typically read at only 50-70\,WPM. Understanding \emph{why} a reader is slow, whether due
+    reading tasks, with a range of 65--185\,WPM. While expert readers may reach 200--400\,WPM~\cite{legge1999}, novice tactile readers typically perform near or below 17\,WPM~\cite{b12}, providing a practical lower reference for real-time monitoring. Understanding \emph{why} a reader is slow, whether due
     to uneven finger movement, frequent backtracking, or inefficient
     reading patterns requires instrumentation that captures more than
     aggregate reading speed. Existing systems for analyzing Braille
@@ -123,7 +123,7 @@
             real time.
 
         \item 
-        A comprehensive multi-metric analysis of Braille reading performance by quantifying reading fluency, finger-motion stability, regressions and hesitations, time-on-task behavior, reading coverage, path efficiency, and overall word-level difficulty.
+        A comprehensive multi-metric analysis quantifying seven performance metrics (WPM, velocity IQR, regression/hesitation rate, time-on-task, skip rate, path efficiency, and composite difficulty) implemented via eight concurrent tracker objects.
         
         %\item A real-time reading speed %estimation framework (WPM) for
             %monitoring Braille reading fluency.
@@ -273,7 +273,7 @@
     a host system over USB--serial; and 
     (iii)~a multi-threaded Python
     software pipeline that computes seven reading performance metrics in
-    real time and renders a eight-panel live visualization suite. No
+    real time and renders an eight-panel live visualization suite. No
     modifications to the Braille page or the reader's hands are required.
 
     The system actively tracks dual-finger interactions using a proximity-based peak-lock assignment algorithm. This allows it to explicitly capture multi-finger reading strategies like the butterfly and side-by-side patterns while calculating independent metrics for each finger.
@@ -283,7 +283,7 @@
 \subsubsection{Cost-Efficient Conductive Grid Architecture}
 
 The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip traces, providing 49 sensing locations mapped to single word positions. The physical layout is shown in Fig.~
-ef{fig:hardware}. The prototype yields an average total component cost of \--\ (for the microcontroller, multiplexer, and conductive materials). Furthermore, this cost scales sub-linearly with grid size, as the primary expense lies in the fixed processing components rather than the sensing surface, supporting the system\'s low-cost claim. It is important to note that the $7\times7$ grid presented in this study serves as an evaluative mockup: to accurately mimic the spatial layout of an authentic embossed Braille sheet placed over the system, a single logical word is assigned across multiple contiguous sensing cells, with the number of cells proportional to the word's character length. A defining feature of this prototype is its extreme cost-efficiency. The sensing grid is constructed entirely from commodity copper tape, which retails for under \$0.50 per metre. The data acquisition is driven by an ESP32 microcontroller development board, available for approximately \$4--5\,USD. The only comparatively expensive component is the pair of analog multiplexer ICs (CD4051) required for row--column switching, at roughly \$0.80\,USD total. Even with all passive components, cabling, and a perfboard, the complete hardware bill of materials is bounded at approximately \$14--18\,USD per unit. While it does not replace the spatial precision of laboratory eye-tracking rigs or high-end instrumented Perkins Braillers, this \$18 proof-of-concept provides a highly scalable, accessible alternative for resource-constrained environments (e.g., public school classrooms) where \$10,000 systems are prohibitively expensive.
+ef{fig:hardware}. The prototype yields an average total component cost of \--\ (for the microcontroller, multiplexer, and conductive materials). Furthermore, this cost scales sub-linearly with grid size, as the primary expense lies in the fixed processing components rather than the sensing surface, supporting the system\'s low-cost claim. It is important to note that the $7\times7$ grid presented in this study serves as an evaluative mockup: to accurately mimic the spatial layout of an authentic embossed Braille sheet placed over the system, a single logical word is assigned across multiple contiguous sensing cells, with the number of cells proportional to the word's character length. A defining feature of this prototype is its extreme cost-efficiency. The sensing grid is constructed entirely from commodity copper tape, which retails for under \$0.50 per meter. The data acquisition is driven by an ESP32-WROOM-32 development board, available for approximately \$4--5\,USD. The only comparatively expensive component is the pair of analog multiplexer ICs (CD4051) required for row--column switching, at roughly \$0.80\,USD total. Even with all passive components, cabling, and a perfboard, the complete hardware bill of materials is bounded at approximately \$14--18\,USD per unit. While it does not replace the spatial precision of laboratory eye-tracking rigs or high-end instrumented Perkins Braillers, this \$18 proof-of-concept provides a highly scalable, accessible alternative for resource-constrained environments (e.g., public school classrooms) where high-end commercial alternatives costing several thousand dollars are prohibitively expensive.
 
     \begin{figure}[!htp]
     \centering
@@ -370,7 +370,7 @@ ef{fig:hardware}. The prototype yields an average total component cost of \--\ (
     7$\times$7 frame to a bounded queue, a metrics thread that
     dequeues frames, runs touch detection, and updates all tracker
     objects, and a UI thread that reads metric snapshots and
-    renders the visualisation suite.  All tracker classes expose an asynchronous snapshot method to decouple high-speed sensing from UI rendering.  The pipeline is illustrated in
+    renders the visualization suite.  All tracker classes expose an asynchronous snapshot method to decouple high-speed sensing from UI rendering.  The pipeline is illustrated in
     Fig.~\ref{fig:sw_flow}.
     \begin{figure}[!htp]
     \centering
@@ -425,8 +425,9 @@ ef{fig:hardware}. The prototype yields an average total component cost of \--\ (
     }
     \caption{Software pipeline: three-thread serial ingestion, dual-finger
     touch detection via connected-component analysis and per-finger
-    peak-lock FSM, eight metric trackers
-    ($D$ = composite difficulty score), and eight-panel live visualisation.}
+    peak-lock FSM, eight metric trackers implementing seven performance metrics
+    ($D$ = composite difficulty score; EWIQR and Welford are sub-trackers
+    of velocity-IQR and ToT respectively), and eight-panel live visualization.}
     \label{fig:sw_flow}
     \vspace{-2mm}
     \end{figure}
@@ -447,15 +448,14 @@ ef{fig:hardware}. The prototype yields an average total component cost of \--\ (
 
     %\subsubsection{Metric: Rolling Words per Minute}
 
-    The system dynamically maps varying physical column widths to word boundaries using a software-defined dictionary. A \texttt{WordGroupAccumulator} gates word registration until all multi-block segments of a single word have been traversed. WPM is then computed
-    over a 60-second rolling window:
-    % \begin{equation}
-    %     \text{WPM}(t) = \frac{n_w(t)}{\Delta T} \times 60,
-    %     \label{eq:wpm}
-    % \end{equation}
+    The system dynamically maps varying physical column widths to word boundaries using a software-defined dictionary. A \texttt{WordGroupAccumulator} gates word registration until all multi-block segments of a single word have been traversed. WPM is then computed over a 60-second rolling window:
+    \begin{equation}
+        \text{WPM}(t) = \frac{n_w(t)}{\Delta T} \times 60
+        \label{eq:wpm}
+    \end{equation}
     where $n_w(t)$ is the touch count within $\Delta T = 60$\,s. An EMA
     with $\alpha = 0.15$ is applied after a median pre-filter (window=3)
-    to reduce per-frame variance, also expressed in the Equation~\ref{eq:ema},
+    to reduce per-frame variance, also expressed as Eq.~(\ref{eq:ema}),
     where $\tilde{x}_t$ is the median-filtered WPM sample. The smoothing
     factor $\alpha = 0.15$ was selected heuristically to balance lag
     against variance: smaller values suppress measurement jitter but
@@ -479,9 +479,10 @@ ef{fig:hardware}. The prototype yields an average total component cost of \--\ (
     algorithm with decay factor of $\lambda=0.95$. For each touch event,
     the velocity profile (cells/s) between consecutive path steps is
     recorded with exponentially decaying weights as expressed in the 
-    Equation~\ref{eqn:velocity}:
-    ,
-    where $\mathrm{clamp}(x,\,a,\,b) = \min\!\left(\max(x,\,a),\,b\right)$
+    Eq.~(\ref{eqn:velocity}), where the exponential decay weights
+    $w_i = \lambda^{n-i}$ ($\lambda=0.95$, $n$=total events, $i$=event index)
+    assign higher influence to recent events, and $\varepsilon=10^{-6}$ prevents
+    division-by-zero. Here $\mathrm{clamp}(x,\,a,\,b) = \min\!\left(\max(x,\,a),\,b\right)$
     constrains the result to the interval $[a, b]$; here $a = 0$ and
     $b = 1$ ensure $C_s$ remains a valid normalized score.
     \begin{align}
@@ -510,8 +511,9 @@ ef{fig:hardware}. The prototype yields an average total component cost of \--\ (
     %\subsubsection{Metric: Hesitation Rate and Inter-Word Regressions}
 
     A regression occurs when the reader returns to a previously touched word. The Word-Stats-Tracker maintains a \emph{seen set} mapping words to their last-touch timestamp. To prevent false regressions during prolonged reading or multi-pass exploration, a time-windowed regression algorithm is employed: a touch is only counted as a regression if the same cell was touched within a 30-second temporal window. Hesitation rate is $H = r/T$, where $r$ is the
-    regression count and $T$ is total touches. Words with regression count
-    $>3$ are flagged as difficulty candidates.
+    regression count and $T$ is total touches. Words with regression count $>2$ are flagged as difficulty candidates
+    (configurable; the pilot session uses a threshold of~2,
+    as reflected in Fig.~\ref{fig:regression_bar}).
 
     %\subsubsection{Metric: Word-Level Time-on-Task}
 
@@ -527,17 +529,17 @@ ef{fig:hardware}. The prototype yields an average total component cost of \--\ (
     %}
 
     Considering $N$ as the total number of mapped word regions (49 selected in the
-    current $7\times7$ prototype), Skip rate is defined as:
-    % \begin{equation}
-    %     S = \frac{|\{w : \mathrm{count}(w) = 0\}|}{N} \times 100\%.
-    %     \label{eq:skiprate}
-    % \end{equation}
+    current $7\times7$ prototype), skip rate $S$ is:
+    \begin{equation}
+        S = \frac{|\{w : \mathrm{count}(w) = 0\}|}{N} \times 100\%
+        \label{eq:skiprate}
+    \end{equation}
     A BFS cluster analysis classifies skip patterns into categories
     (sensing failure, column alignment, boundary avoidance, saccade
     drift).
 
     %\subsubsection{Metric: Path Efficiency}
-    The path efficiency is defined as per the Equation~\ref{eq:eta},
+    Path efficiency is defined as Eq.~(\ref{eq:eta}),
     where $d_{\mathrm{straight}}$ is the Euclidean distance between the
     first and last cells visited within a touch event, and
     $d_{\mathrm{actual}}$ is the cumulative arc length of the detected
@@ -555,9 +557,9 @@ ef{fig:hardware}. The prototype yields an average total component cost of \--\ (
         D(e) = w_1\mathrm{REV}(e) + w_2\mathrm{ZC}(e) + w_3\mathrm{VEL}(e) + w_4\mathrm{WREV}(e)
         \label{eq:difficulty}
     \end{equation}
-    where $\mathrm{REV}(e)$ represents the number of within-touch path direction reversals, $\mathrm{ZC}(e)$ denotes the count of zero-crossings in the velocity profile indicating hesitation, $\mathrm{VEL}(e) = \bar{v}/(\bar{v}+1)\in[0,1)$
+    where $\mathrm{REV}(e)$ and $\mathrm{ZC}(e)$ are raw event counts (direction reversals and velocity zero-crossings); in our pilot data both remain $\leq 5$ per event, keeping their weighted contributions commensurate with the bounded terms. $\mathrm{VEL}(e) = \bar{v}/(\bar{v}+1)\in[0,1)$
 is a normalized speed term that increases toward unity as mean finger velocity
-$\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the event constitutes a session-level inter-word regression. The word-level difficulty $D(w)$ is then computed as the arithmetic mean of $D(e)$ for all events mapped to word $w$. In the current prototype, the heuristic weights are set to $w_1=1.0$, $w_2=0.5$, $w_3=2.0$, and $w_4=1.5$. These weights were empirically chosen to prioritize regression penalties. Exploratory Principal Component Analysis (PCA) revealed that sighted participants exhibit a tactile ``scrubbing'' behavior (high hesitation correlating with high velocity), which inverts the kinematics of proficient blind readers. Thus, deriving valid statistical weights via machine learning is deferred to our upcoming formal clinical trials to prevent overfitting to sighted behavior.
+$\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the event constitutes a session-level inter-word regression. The word-level difficulty $D(w)$ is then computed as the arithmetic mean of $D(e)$ for all events mapped to word $w$. In the current prototype, the heuristic weights are set to $w_1=1.0$, $w_2=0.5$, $w_3=2.0$, and $w_4=1.5$. These weights were empirically chosen to prioritize regression penalties. Exploratory PCA of our pilot data revealed that sighted participants exhibit a tactile ``scrubbing'' behavior (high hesitation correlating with high velocity). This appears to invert the smooth kinematic profiles of proficient blind readers documented in prior work~\cite{nonaka2021}. Thus, deriving valid statistical weights via machine learning is deferred to our upcoming formal clinical trials to prevent overfitting to sighted behavior.
     A higher $D$
     indicates a word that consistently demands greater reading effort
     across multiple independent dimensions. Reading difficulty variance is rendered as a switchable view in the $7\times7$ 2D performance heatmap, driven by an Exponentially Weighted Interquartile Range (EWIQR) of touch durations, which isolates current reading inconsistency.
@@ -624,7 +626,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     Fig.~\ref{fig:vel_overlay} shows the velocity profile overlay for a continuous reading sample. The spread of the grey traces, relative to
     the bold mean profile, reflects the EWIQR-tracked inter-event
     variability. A narrowing spread over an evaluation period indicates improving
-    motor consistency, captured by $C_s$ (Equation~\ref{eqn:velocity}).
+    motor consistency, captured by $C_s$ (Eq.~\ref{eqn:velocity}).
 %~\ref{eq:consistency}).
 
     \begin{figure}[!htp]
@@ -670,12 +672,12 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \begin{figure}[!htp]
     \centering
     \includegraphics[width=0.60\columnwidth]{regression_bar.pdf}
-    \caption{Regression frequency chart (aggregated system evaluation data): red bars mark flagged words whose regression counts exceed a configured threshold, demonstrating the system's ability to isolate spatially localised hesitation targets.}
+    \caption{Regression frequency chart (aggregated system evaluation data): red bars mark flagged words whose regression counts exceed a configured threshold, demonstrating the system's ability to isolate spatially localized hesitation targets.}
     \label{fig:regression_bar}
     \vspace{-2mm}
     \end{figure}
 
-    Words flagged by the regression tracker overlapped with high composite difficulty scores, confirming convergent validity across independent metrics. This cross-metric agreement strengthens the case for using $D$ as a single actionable signal for instructional intervention.
+    \textit{Socks} ($D=1.22$) and \textit{Frog} ($D=1.20$) rank among the top-3 hardest words by composite difficulty while also showing elevated regression counts, providing partial convergent validity across independent metrics. Notably, \textit{Ant} ($D=1.41$, the hardest word overall) does not appear in Fig.~\ref{fig:regression_bar}, indicating its difficulty is driven primarily by reversal and velocity signals (REV/ZC/VEL) rather than inter-word regressions --- illustrating the complementary diagnostic value of the seven metric channels.
 
     Figs.~\ref{fig:tot_bar} and~\ref{fig:tot_3d} show the 2D performance heatmaps generated by the visualization pipeline. The Time-on-Task (ToT) metric provides high-resolution temporal profiles for individual Braille cells, directly reflecting the motor difficulty and dwell time of specific segments. The composite difficulty score $D$ effectively aggregates these signals, identifying the highest-effort regions across the reading matrix independent of simple Time-on-Task. For instance, \textit{Ant} ($D=1.41$) and \textit{Socks} ($D=1.22$) dominate as the hardest words by composite difficulty.
 
@@ -711,7 +713,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     \subsection{Path Efficiency and Composite Difficulty}
 
-    The path efficiency metric $\eta$ (Eq.~\ref{eq:eta}) quantifies the directness of the reader's finger trajectory, distinguishing between discrete, well-centred taps and ambiguous sliding motions. A consistently high $\eta$ baseline confirms that the physical grid successfully resolves precise tactile interactions, proving the system capable of tracking prolonged reading activity without sensor degradation or baseline drift.
+    The path efficiency metric $\eta$ (Eq.~\ref{eq:eta}) quantifies the directness of the reader's finger trajectory, distinguishing between discrete, well-centred taps and ambiguous sliding motions. A consistently high $\eta$ baseline confirms that the physical grid successfully resolves precise tactile interactions, suggesting the system can sustain tracking across an extended reading session without observable sensor degradation or baseline drift.
 
     \begin{figure}[!htp]
     \centering
@@ -759,11 +761,11 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \vspace{-2mm}
     \end{figure}
 
-    Analysis of these surface mappings confirms that the composite metric $D$ produces stable, reproducible word-level difficulty profiles rather than transient, session-specific noise, serving as a reliable indicator of pedagogical challenge.
+    Analysis of these surface mappings is consistent with the composite metric $D$ producing stable word-level difficulty profiles across the recorded sessions; multi-session repeatability validation remains as future work.
 
     \subsection{System Latency}
     
-    Real-time tracking requires low end-to-end system latency. The innate hardware latency of the sensing grid and ESP32 transmission, excluding the Python processing pipeline, is approximately 55-60\,ms. The Python code computation latency for touch localization, metric updates, and rendering is 33\,ms per frame. The combined end-to-end latency is approximately 95\,ms, which is well below human perception thresholds for tactile feedback, ensuring highly responsive multi-metric tracking during live reading sessions.
+    Real-time tracking requires low end-to-end system latency. The innate hardware latency of the sensing grid and ESP32 transmission, excluding the Python processing pipeline, is approximately 55-60\,ms. The Python code computation latency for touch localization, metric updates, and rendering is 33\,ms per frame. The combined end-to-end latency is approximately 88--93\,ms, which is well below human perception thresholds for tactile feedback, ensuring highly responsive multi-metric tracking during live reading sessions.
 
     % ---------------------------------------------------------------
 \subsection{Composite Score Sensitivity}
