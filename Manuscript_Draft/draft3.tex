@@ -681,18 +681,18 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     \begin{figure}[!htp]
     \centering
-    \includegraphics[width=0.65\columnwidth]{tot_heatmap.pdf}
-    \caption{$7\times7$ Time-on-Task heatmap (aggregated empirical data, ms). Blue intensity encodes mean dwell time; darker = longer. Variations in dwell time are visualized to pinpoint reading struggles. \textbf{Note:} To visualize regional difficulty, cognitive metrics (such as dwell time) are aggregated at the logical word-level and projected uniformly across the spatial grid cells occupied by that word.}
+    \includegraphics[width=0.60\columnwidth]{tot_heatmap.pdf}
+    \caption{$7\times7$ Time-on-Task heatmap (aggregated empirical data, ms). Blue intensity encodes mean dwell time; darker = longer. Variations in dwell time are visualized to pinpoint reading struggles. \textbf{Note:} Metrics are aggregated at word-level and projected uniformly across the occupied grid cells.}
     \label{fig:tot_bar}
-    \vspace{-6mm}
+    \vspace{-2mm}
     \end{figure}
 
     \begin{figure}[!htp]
     \centering
-    \includegraphics[width=0.65\columnwidth]{diff_heatmap.pdf}
-    \caption{$7\times7$ composite difficulty heatmap (aggregated empirical data $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. The metric effectively isolates the hardest regions. \textbf{Note:} Similar to Time-on-Task, difficulty scores are aggregated at the word-level and projected onto corresponding cells.}
+    \includegraphics[width=0.60\columnwidth]{diff_heatmap.pdf}
+    \caption{$7\times7$ composite difficulty heatmap (aggregated empirical data $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. The metric effectively isolates the hardest regions. \textbf{Note:} Same word-level projection as Time-on-Task applies here.}
     \label{fig:tot_3d}
-    \vspace{-6mm}
+    \vspace{-2mm}
     \end{figure}
 
     \subsection{Skip Rate and Grid Coverage}
@@ -701,7 +701,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     \begin{figure}[!htp]
     \centering
-    \includegraphics[width=0.65\columnwidth]{skip_heatmap.pdf}
+    \includegraphics[width=0.60\columnwidth]{skip_heatmap.pdf}
     \caption{Grid coverage map (aggregated touch counts). Light green = 1--2 touches; dark green = 3--5 (high revisit rate). The system maps full coverage and successfully highlights heavily re-explored areas without any skipped cells in this session.}
     \label{fig:skip_heatmap}
     \vspace{-2mm}
