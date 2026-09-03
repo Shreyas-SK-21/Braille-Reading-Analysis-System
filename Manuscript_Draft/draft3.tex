@@ -283,7 +283,7 @@
 \subsubsection{Cost-Efficient Conductive Grid Architecture}
 
 The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip traces, providing 49 sensing locations mapped to single word positions. The physical layout is shown in Fig.~
-ef{fig:hardware}. The prototype yields an average total component cost of \--\ (for the microcontroller, multiplexer, and conductive materials). Furthermore, this cost scales sub-linearly with grid size, as the primary expense lies in the fixed processing components rather than the sensing surface, supporting the system\'s low-cost claim. It is important to note that the $7\times7$ grid presented in this study serves as an evaluative mockup: to accurately mimic the spatial layout of an authentic embossed Braille sheet placed over the system, a single logical word is assigned across multiple contiguous sensing cells, with the number of cells proportional to the word's character length. A defining feature of this prototype is its extreme cost-efficiency. The sensing grid is constructed entirely from commodity copper tape, which retails for under \$0.50 per meter. The data acquisition is driven by an ESP32-WROOM-32 development board, available for approximately \$4--5\,USD. The only comparatively expensive component is the pair of analog multiplexer ICs (CD4051) required for row--column switching, at roughly \$0.80\,USD total. Even with all passive components, cabling, and a perfboard, the complete hardware bill of materials is bounded at approximately \$14--18\,USD per unit. While it does not replace the spatial precision of laboratory eye-tracking rigs or high-end instrumented Perkins Braillers, this \$18 proof-of-concept provides a highly scalable, accessible alternative for resource-constrained environments (e.g., public school classrooms) where high-end commercial alternatives costing several thousand dollars are prohibitively expensive.
+ef{fig:hardware}. The prototype yields an average total component cost of \--\ (for the microcontroller, multiplexer, and conductive materials). Furthermore, this cost scales sub-linearly with grid size, as the primary expense lies in the fixed processing components rather than the sensing surface, supporting the system\'s low-cost claim. It is important to note that the $7\times7$ grid presented in this study serves as an evaluative mockup: to accurately mimic the spatial layout of an authentic embossed Braille sheet placed over the system, a single logical word is assigned across multiple contiguous sensing cells, with the number of cells proportional to the word's character length. A defining feature of this prototype is its extreme cost-efficiency. The sensing grid is constructed entirely from commodity copper tape, which retails for under \$0.50 per meter. The data acquisition is driven by an ESP32-WROOM-32 development board, available for approximately \$4--5\,USD. The only comparatively expensive component is the pair of analog multiplexer ICs (CD4051) required for row--column switching, at roughly \$0.80\,USD total. The remainder of the \$14--18\,USD hardware bill of materials is accounted for by ubiquitous laboratory supplies: a prototyping breadboard, $1\,\mathrm{M}\Omega$ resistors, and jumper wiring. While it does not replace the spatial precision of laboratory eye-tracking rigs or high-end instrumented Perkins Braillers, this \$18 proof-of-concept provides a highly scalable, accessible alternative for resource-constrained environments (e.g., public school classrooms) where high-end commercial alternatives costing several thousand dollars are prohibitively expensive.
 
     \begin{figure}[!htp]
     \centering
@@ -573,10 +573,8 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \label{sec:results}
 
     The results presented in this section were obtained through a
-    pilot evaluation conducted with sighted participants interacting
-    with the $7\times7$ grid surface. Ethical approval was taken from the Institution Review Board (IRB) for sighted and healthy subjects to evaluate the prototype. This evaluation was performed
-    to validate system functionality, metric computation, and
-    visualization pipeline. These results should be
+    pilot evaluation with sighted participants interacting
+    with the $7\times7$ grid surface (approved by the Institutional Review Board). To effectively demonstrate the system's capabilities, the figures present a representative aggregated reading dataset; formal variance tracking and multi-session statistical analysis are deferred to the upcoming clinical trials. This evaluation validates system functionality, metric computation, and the visualization pipeline. These results should be
     interpreted as a proof-of-concept demonstration of system
     capability; formal user studies with visually impaired Braille
     readers remain as future work (Section~\ref{sec:limitations}).
@@ -672,7 +670,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \begin{figure}[!htp]
     \centering
     \includegraphics[width=0.60\columnwidth]{regression_bar.pdf}
-    \caption{Regression frequency chart (aggregated system evaluation data): red bars mark flagged words whose regression counts exceed a configured threshold, demonstrating the system's ability to isolate spatially localized hesitation targets.}
+    \caption{Regression frequency chart (aggregated system evaluation data): red bars mark flagged words whose regression counts exceed a configured threshold, demonstrating the system's ability to isolate spatially localized hesitation targets. Words omitted from the chart recorded exactly zero regressions.}
     \label{fig:regression_bar}
     \vspace{-2mm}
     \end{figure}
@@ -692,7 +690,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \begin{figure}[!htp]
     \centering
     \includegraphics[width=0.60\columnwidth]{diff_heatmap.pdf}
-    \caption{$7\times7$ composite difficulty heatmap (aggregated empirical data $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. The metric effectively isolates the hardest regions. \textbf{Note:} Same word-level projection as Time-on-Task applies here.}
+    \caption{$7\times7$ composite difficulty heatmap (aggregated empirical data $D$). The continuous gradient maps directly to effort: dark red denotes high difficulty, while light yellow/white denotes low difficulty. The metric effectively isolates the hardest regions. \textbf{Note:} Same word-level projection as Time-on-Task applies here.}
     \label{fig:tot_3d}
     \vspace{-2mm}
     \end{figure}
