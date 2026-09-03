@@ -40,11 +40,8 @@
 \setlength{\abovecaptionskip}{3pt}
 \setlength{\belowcaptionskip}{-2pt}
 
-
     \title{A Low-Cost Conductive Grid System for Real-Time\\
     Multi-Metric Braille Reading Performance Analysis}
-
-
 
     \maketitle
 
@@ -149,8 +146,6 @@
             %metric signals into a single %actionable indicator.
     \end{itemize}
 
-
-
     % -------------------------------------------%--------------------
     \section{Related Work}
     \label{sec:related}
@@ -239,7 +234,7 @@
     \caption{Comparison of Braille Reading Analysis Systems}
     \label{tab:comparison}
     \begin{center}
-    \resizebox{0.70\columnwidth}{!}{%
+    \resizebox{0.90\columnwidth}{!}{%
     \begin{tabular}{|l|c|c|c|c|c|}
     \hline
     \textbf{System} & \textbf{Low} & \textbf{Non-} & \textbf{Real-} &
@@ -261,7 +256,7 @@
     and composite difficulty $D$.}
     \end{table}
 
-    Table~\ref{tab:comparison} provides a qualitative comparison across four practical dimensions: cost, invasiveness, real-time operation, and per-word metric granularity. Our core objective is to automate the time-consuming and impractical manual process of recording reading sessions on video for post-hoc analysis, enabling classroom-scale deployment. No currently published system provides a directly comparable low-cost, real-time, multi-metric pipeline against which head-to-head quantitative benchmarking is possible. Our core objective was to automate a process currently performed manually---recording sessions on video and analyzing finger movement post-hoc---which is time-consuming and impractical for classroom-scale use. Quantitative benchmarking against an external reference system is planned as part of the forthcoming evaluation with visually impaired readers.
+    Table~\ref{tab:comparison} provides a qualitative comparison across four practical dimensions: cost, invasiveness, real-time operation, and per-word metric granularity. Our core objective is to automate the time-consuming process of manually recording reading sessions on video for post-hoc finger-movement analysis, which is impractical for classroom-scale deployment. No currently published low-cost, real-time, multi-metric system exists for direct benchmarking; quantitative comparison against a reference system is planned in the forthcoming evaluation with visually impaired readers.
 
     % ---------------------------------------------------------------
     \section{Proposed System}
@@ -290,7 +285,7 @@
 The sensing layer is a $7\times7$ prototype matrix of conductive copper-strip traces, providing 49 sensing locations mapped to single word positions. The physical layout is shown in Fig.~
 ef{fig:hardware}. The prototype yields an average total component cost of \--\ (for the microcontroller, multiplexer, and conductive materials). Furthermore, this cost scales sub-linearly with grid size, as the primary expense lies in the fixed processing components rather than the sensing surface, supporting the system\'s low-cost claim. It is important to note that the $7\times7$ grid presented in this study serves as an evaluative mockup: to accurately mimic the spatial layout of an authentic embossed Braille sheet placed over the system, a single logical word is assigned across multiple contiguous sensing cells, with the number of cells proportional to the word's character length. A defining feature of this prototype is its extreme cost-efficiency. The sensing grid is constructed entirely from commodity copper tape, which retails for under \$0.50 per metre. The data acquisition is driven by an ESP32 microcontroller development board, available for approximately \$4--5\,USD. The only comparatively expensive component is the pair of analog multiplexer ICs (CD4051) required for row--column switching, at roughly \$0.80\,USD total. Even with all passive components, cabling, and a perfboard, the complete hardware bill of materials is bounded at approximately \$14--18\,USD per unit. While it does not replace the spatial precision of laboratory eye-tracking rigs or high-end instrumented Perkins Braillers, this \$18 proof-of-concept provides a highly scalable, accessible alternative for resource-constrained environments (e.g., public school classrooms) where \$10,000 systems are prohibitively expensive.
 
-    \begin{figure}[htbp]
+    \begin{figure}[!htp]
     \centering
     \includegraphics[width=0.55\columnwidth,keepaspectratio]{braille_setup.png}
     \caption{Physical layout of the $7\times7$ conductive grid with ESP32 controller board.}
@@ -300,7 +295,7 @@ ef{fig:hardware}. The prototype yields an average total component cost of \--\ (
 
     \subsubsection{Excitation Signal and Scanning}
 
-    A hardware timer generates a $\sim$100\,KHz square-wave excitation signal. Electromagnetic interference (EMI) 
+    A hardware timer generates a $\sim$100\,kHz square-wave excitation signal. Electromagnetic interference (EMI) 
     rejection relies on software-based baseline subtraction and amplitude thresholding rather than passive filtering. 
     The AC carrier is routed through each selected transmit (TX) row in turn, and capacitively coupled signals are 
     detected on the receive (RX) column lines when a finger bridges an intersection.
@@ -318,7 +313,7 @@ ef{fig:hardware}. The prototype yields an average total component cost of \--\ (
     with a 30-sample averaged ADC filter. Frame timestamps are derived from the microcontroller's hardware timer to support latency measurement. 
     The resulting $7\times7$ activation matrix is transmitted to the host.
 
-    \begin{figure}[htbp]
+    \begin{figure}[!htp]
     \centering
     \resizebox{0.40\columnwidth}{!}{%
     \begin{tikzpicture}[
@@ -338,7 +333,7 @@ ef{fig:hardware}. The prototype yields an average total component cost of \--\ (
     \node (start)  [startend]              {Power On};
     \node (init)   [block, below=of start] {Disable WiFi/BT};
     \node (pins)   [block, below=of init]  {Init MUX \& ADC};
-    \node (pwm)    [block, below=of pins]  {Start 100\,KHz PWM};
+    \node (pwm)    [block, below=of pins]  {Start 100\,kHz PWM};
     \node (txrst)  [block, below=of pwm]   {TX $\leftarrow$ 0};
     \node (check)  [decide, below=0.55cm of txrst] {TX $<$ 7?};
     \node (sel)    [block, below=of check] {Select TX via MUX};
@@ -377,7 +372,7 @@ ef{fig:hardware}. The prototype yields an average total component cost of \--\ (
     objects, and a UI thread that reads metric snapshots and
     renders the visualisation suite.  All tracker classes expose an asynchronous snapshot method to decouple high-speed sensing from UI rendering.  The pipeline is illustrated in
     Fig.~\ref{fig:sw_flow}.
-    \begin{figure}[htbp]
+    \begin{figure}[!htp]
     \centering
     \resizebox{0.40\columnwidth}{!}{%
     \begin{tikzpicture}[
@@ -577,19 +572,16 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     The results presented in this section were obtained through a
     pilot evaluation conducted with sighted participants interacting
-    with the $7\times7$ grid surface. This evaluation was performed
+    with the $7\times7$ grid surface. Ethical approval was taken from the Institution Review Board (IRB) for sighted and healthy subjects to evaluate the prototype. This evaluation was performed
     to validate system functionality, metric computation, and
     visualization pipeline. These results should be
     interpreted as a proof-of-concept demonstration of system
     capability; formal user studies with visually impaired Braille
     readers remain as future work (Section~\ref{sec:limitations}).
 
-
     \subsection{Experimental Setup and Pilot Protocol}
 
     To characterize system performance and validate the software pipeline, empirical hardware tests were conducted across multiple independent reading sessions. Quantitative benchmarking against a reference tracking system, alongside multi-session variance and repeatability analysis, is planned as part of the formal visually impaired reader evaluation in future work. To accommodate the variety of target words on the prototype's $7\times7$ spatial footprint, different sets of words were mapped and tested in separate passes. The integrated system successfully processed continuous touch events across all 49 grid positions in real-time, yielding rich datasets for metric extraction. Sighted participants were blindfolded to eliminate visual feedback, strictly isolating tactile exploration and mirroring the operational constraints of visually impaired readers. The $7\times7$ evaluation grid assigns each logical word across one or more contiguous sensing cells based on character length, mimicking the spatial layout of an authentic embossed Braille sheet.
-
-
 
     \subsection{WPM Accuracy and EMA Stability}
 
@@ -627,11 +619,9 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     \vspace{-2mm}
     \end{figure}
 
-
     \subsection{Velocity IQR and Motor Consistency}
 
-    Fig.~\ref{fig:vel_overlay} shows the velocity profile overlay for a
-    a continuous reading sample. The spread of the grey traces, relative to
+    Fig.~\ref{fig:vel_overlay} shows the velocity profile overlay for a continuous reading sample. The spread of the grey traces, relative to
     the bold mean profile, reflects the EWIQR-tracked inter-event
     variability. A narrowing spread over an evaluation period indicates improving
     motor consistency, captured by $C_s$ (Equation~\ref{eqn:velocity}).
@@ -689,25 +679,21 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     Figs.~\ref{fig:tot_bar} and~\ref{fig:tot_3d} show the 2D performance heatmaps generated by the visualization pipeline. The Time-on-Task (ToT) metric provides high-resolution temporal profiles for individual Braille cells, directly reflecting the motor difficulty and dwell time of specific segments. The composite difficulty score $D$ effectively aggregates these signals, identifying the highest-effort regions across the reading matrix independent of simple Time-on-Task. For instance, \textit{Ant} ($D=1.41$) and \textit{Socks} ($D=1.22$) dominate as the hardest words by composite difficulty.
 
-
-
     \begin{figure}[!htp]
     \centering
-    \includegraphics[width=0.55\columnwidth]{tot_heatmap.pdf}
+    \includegraphics[width=0.65\columnwidth]{tot_heatmap.pdf}
     \caption{$7\times7$ Time-on-Task heatmap (aggregated empirical data, ms). Blue intensity encodes mean dwell time; darker = longer. Variations in dwell time are visualized to pinpoint reading struggles. \textbf{Note:} To visualize regional difficulty, cognitive metrics (such as dwell time) are aggregated at the logical word-level and projected uniformly across the spatial grid cells occupied by that word.}
     \label{fig:tot_bar}
     \vspace{-6mm}
     \end{figure}
 
-
     \begin{figure}[!htp]
     \centering
-    \includegraphics[width=0.55\columnwidth]{diff_heatmap.pdf}
+    \includegraphics[width=0.65\columnwidth]{diff_heatmap.pdf}
     \caption{$7\times7$ composite difficulty heatmap (aggregated empirical data $D$). Red ($D\geq0.90$) = high effort; yellow ($0.50\leq D<0.90$) = moderate; white = low. The metric effectively isolates the hardest regions. \textbf{Note:} Similar to Time-on-Task, difficulty scores are aggregated at the word-level and projected onto corresponding cells.}
     \label{fig:tot_3d}
     \vspace{-6mm}
     \end{figure}
-
 
     \subsection{Skip Rate and Grid Coverage}
 
@@ -715,16 +701,13 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     \begin{figure}[!htp]
     \centering
-    \includegraphics[width=0.55\columnwidth]{skip_heatmap.pdf}
+    \includegraphics[width=0.65\columnwidth]{skip_heatmap.pdf}
     \caption{Grid coverage map (aggregated touch counts). Light green = 1--2 touches; dark green = 3--5 (high revisit rate). The system maps full coverage and successfully highlights heavily re-explored areas without any skipped cells in this session.}
     \label{fig:skip_heatmap}
     \vspace{-2mm}
     \end{figure}
 
     Because this representative reading session achieved complete spatial coverage (no unvisited cells), it demonstrates the participant's thorough tactile scanning. In sessions where skipped cells cluster in lower grid rows, it typically indicates that observation duration, rather than intrinsic word difficulty, drives unvisited regions. Skip rates should therefore be normalized by observation duration when comparing reading behaviors across participants or conditions.
-
-
-
 
     \subsection{Path Efficiency and Composite Difficulty}
 
@@ -778,7 +761,6 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
 
     Analysis of these surface mappings confirms that the composite metric $D$ produces stable, reproducible word-level difficulty profiles rather than transient, session-specific noise, serving as a reliable indicator of pedagogical challenge.
 
-
     \subsection{System Latency}
     
     Real-time tracking requires low end-to-end system latency. The innate hardware latency of the sensing grid and ESP32 transmission, excluding the Python processing pipeline, is approximately 55-60\,ms. The Python code computation latency for touch localization, metric updates, and rendering is 33\,ms per frame. The combined end-to-end latency is approximately 95\,ms, which is well below human perception thresholds for tactile feedback, ensuring highly responsive multi-metric tracking during live reading sessions.
@@ -823,8 +805,6 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     grid with continuous parallel sensing to improve spatial and temporal fidelity,
     as well as investigate alternative low-force sensing modalities.
 
-
-
     The primary limitation of this study is that the pilot evaluation was
     conducted exclusively with sighted participants, and results have not yet
     been validated with visually impaired Braille readers --- the primary target
@@ -840,7 +820,6 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     seven-metric pipeline requires no re-calibration between participants.
 
     An additional hardware limitation is the signal-to-noise ratio (SNR) attenuation caused by standard dielectric Braille paper (e.g., 120--160 gsm cardstock). The heavy reliance on aggressive software smoothing (such as the $\alpha = 0.15$ exponential moving average and median filters) is a deliberate engineering trade-off to compensate for this attenuation while using low-cost commodity copper tape. Formal characterization of dielectric attenuation and baseline SNR optimization without heavy software filtering is planned for the next hardware iteration.
-
 
     \section{Conclusion}
     \label{sec:conclusion}
