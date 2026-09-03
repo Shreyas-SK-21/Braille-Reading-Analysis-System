@@ -768,28 +768,7 @@ $\bar{v}$ increases, and $\mathrm{WREV}(e)$ is a binary flag indicating if the e
     % ---------------------------------------------------------------
 \subsection{Composite Score Sensitivity}
 
-    The composite difficulty score $D$ currently uses fixed heuristic weights ($W_1{=}1.0$, $W_2{=}0.5$, $W_3{=}2.0$, $W_4{=}1.5$). To demonstrate the adaptability of the composite score for different pedagogical needs, Table~\ref{tab:sensitivity} compares word difficulty rankings across three varying weight configurations. The high-difficulty cluster (\textit{Ant}, \textit{Socks}, \textit{Frog}) dominates across presets, but their relative rankings shift logically: Speed-Focused weights elevate slow-read words like \textit{Cow} and \textit{Socks}, while Accuracy-Focused weights strongly penalize high-regression words like \textit{Alligator} and \textit{Frog}.
-
-    \begin{table}[!htp]
-    \caption{Sensitivity Analysis: Top-7 Word Difficulty Rankings Under Three Weight Presets}
-\label{tab:sensitivity}
-    \begin{center}
-    \resizebox{0.70\columnwidth}{!}{%
-    \begin{tabular}{|c|c|c|c|}
-    \hline
-    \textbf{Rank} & \textbf{Default} ($W_1$=1.0, $W_3$=2.0) & \textbf{Speed-Focused} ($W_3$=3.0) & \textbf{Accuracy-Focused} ($W_1$=2.0) \\
-    \hline
-    1 & Ant       & Socks     & Frog      \\
-    2 & Socks     & Ant       & Alligator \\
-    3 & Frog      & Cow       & Socks     \\
-    4 & Switch    & Frog      & Ant       \\
-    5 & Cow       & Switch    & Switch    \\
-    6 & Alligator & Elephant  & Cow       \\
-    7 & Elephant  & Alligator & Elephant  \\
-    \hline
-    \end{tabular}}
-    \end{center}
-    \end{table}
+    The composite difficulty score $D$ currently uses fixed heuristic weights ($W_1{=}1.0$, $W_2{=}0.5$, $W_3{=}2.0$, $W_4{=}1.5$). To demonstrate adaptability for different pedagogical needs, we compared word difficulty rankings across varying weight configurations. The core high-difficulty cluster (\textit{Ant}, \textit{Socks}, \textit{Frog}) dominates across all presets, but their relative rankings shift logically: a Speed-Focused preset ($W_3{=}3.0$) elevates slow-read words, shifting \textit{Socks} to the \#1 rank and pushing \textit{Cow} ahead of \textit{Frog}; conversely, an Accuracy-Focused preset ($W_1{=}2.0$) strongly penalizes high-regression words, elevating \textit{Frog} and \textit{Alligator} to the \#1 and \#2 most difficult words overall.
 
     \section{Limitations and Future Work}
     \label{sec:limitations}
