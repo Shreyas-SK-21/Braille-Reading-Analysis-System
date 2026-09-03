@@ -1,0 +1,49 @@
+Rebuttal 
+
+Reviewer: CFY1 
+
+Response to Reviewer 
+
+We thank the reviewer for their careful reading of the manuscript and for the constructive, detailed feedback. We are encouraged that the reviewer found the system architecture clearly described, the motivation well-grounded, and the integration of low-cost sensing with multi-metric analytics novel. Below we address each weakness raised. 
+
+• Evaluation limited to sighted participants: 
+   We agree this is the central limitation of the current work, and we appreciate the reviewer highlighting it. We would like to clarify that formal evaluation with visually impaired Braille readers is already in progress: we have asked for approval from our Institution Review board (IRB) to deploy and test the prototype with visually impaired students. We will report participant demographics and study protocol details in the revised manuscript once this evaluation is complete. In the meantime, we have revised Sections IV and V to state explicitly that the reported pilot involved sighted subjects were blindfolded while evaluating the design, and we have strengthened the limitations discussion to make clear that all reported findings are proof-of-concept evidence of system functionality rather than validated pedagogical claims. Note that IRB approval for visually sighted subjects for evaluating the prototype was taken. 
+
+• Figure quality: 
+   We thank the reviewer for this observation and agree that the original figures, which were raw screenshots of the live PyQtGraph visualization dashboard, fell short of publication quality. We would like to clarify the reasoning behind the original figures: our software pipeline exports the visualization panels as captured images so that readers can see exactly what an educator/user would observe on the live dashboard during a session. However, we recognize this did not serve the paper's presentation standards. We have since regenerated all affected plots in IEEE-compliant vector format and revised the corresponding UI rendering code so that future exports also meet this standard. The updated figures will be included in the revised manuscript. 
+
+• Lack of quantitative benchmark comparison: 
+   We appreciate this concern and would like to draw the reviewer's attention to Table I, where we compared the proposed system against representative marker-based, wearable, tablet-touch, vision-based, and refreshable-display systems along four practical dimensions (cost, invasiveness, real-time capability, and vision-free operation). Our core objective was to automate a process that is currently performed manually, i.e., recording a reading session on video and manually/post-hoc analyzing finger movement, which is time-consuming and impractical for classroom-scale deployment. Table I was intended to demonstrate this qualitative advantage over the existing landscape rather than a head-to-head quantitative benchmark, since no directly comparable low-cost, real-time, multi-metric system currently exists to benchmark against (as discussed in Section II). We will revise the text around Table I to state this comparison rationale more explicitly, and we will clarify in Section IV that quantitative benchmarking against a reference system is planned as part of the visually-impaired-reader evaluation in future work. 
+
+Reviewer: 2VcT 
+
+Response to Reviewer 
+
+We thank the reviewer for their positive assessment and for the thoughtful, constructive suggestions, which we believe will meaningfully strengthen the paper. We address each point below. 
+
+• Lack of validation with visually impaired Braille readers: 
+       We agree this is the central limitation of the current work, and we appreciate the reviewer highlighting it. We would like to clarify that formal evaluation with visually impaired Braille readers is already in progress: we have asked for approval from our institution's Review Board (IRB) to deploy and test the prototype with visually impaired students. We will report participant demographics and study protocol details in the revised manuscript once this evaluation is complete. In the meantime, we have revised Sections IV and V to state explicitly that the reported pilot involved sighted subjects were blindfolded while evaluating the design, and we have strengthened the limitations discussion to make clear that all reported findings are proof-of-concept evidence of system functionality rather than validated pedagogical claims. Note that IRB approval for visually sighted subjects for evaluating the prototype was taken. 
+
+• Justification of composite difficulty score weighting: 
+       We thank the reviewer for this valuable suggestion. The current heuristic weights (w1=1.0, w2=0.5, w3=2.0, w4=1.5) were initially intended to give a reasonable starting configuration. Following the reviewer's suggestion, we conducted an exploratory Principal Component Analysis (PCA) to derive statistically validated weights. However, our correlation analysis revealed that in our sighted, blindfolded pilot cohort, high hesitation unexpectedly correlated with high reading velocity (a frantic "scrubbing" behavior), which inverts the smooth kinematic profile of a proficient visually impaired reader. Consequently, deriving static PCA weights from this dataset resulted in a model overfitted to sighted behavior. We have therefore retained the adjustable heuristic scheme, allowing an educator to tune the composite score to their own diagnostic priorities, and we have updated Section V to explicitly note that deriving valid statistical weights via machine learning is deferred to our upcoming formal clinical trials. We have also added a sensitivity analysis showing how high-difficulty words shift under alternative weighting schemes. 
+
+• Results are illustrative rather than quantitative; need robustness/repeatability analysis: 
+       We appreciate this point and acknowledge that the current results, drawn from representative single sessions, are primarily illustrative. Our intent in this submission was to first establish that the full pipeline operates correctly end-to-end and to characterize the system's technical operating parameters (excitation frequency, sampling rate, latency, ADC filtering), which we report in Section III and IV as the technical basis for the metrics. We agree, however, that repeatability and robustness across multiple sessions and participants are necessary to establish the reliability of the metrics themselves, and we will include quantitative multi-session variance/repeatability analysis alongside the planned evaluation with visually impaired readers. 
+
+• Scalability of the 7x7 grid to larger surfaces/longer passages: 
+       We thank the reviewer for raising this important practical question. The 7x7 grid size in the current prototype was constrained primarily by the limited number of pins on the ESP32 capable of high-frequency, stable synchronized sampling required for the row–column multiplexed scanning architecture. We will add a discussion in Section V clarifying that scaling to larger surfaces is architecturally feasible via transitioning to a microcontroller with higher-throughput ADC and expanded I/O to handle a larger interleaved multiplexing array, and we outline this as a concrete direction for supporting full-page and multi-line Braille reading in Section V. 
+
+Reviewer: dTSB 
+
+Response to Reviewer 
+
+We thank the reviewer for their positive assessment and for the helpful, specific suggestions for improving the manuscript's clarity and presentation. 
+
+• Cost estimation to support the low-cost claim: 
+       We thank the reviewer for this important point. We have added a detailed cost breakdown of the current prototype (conductive grid materials, ESP32 board, multiplexer, and supporting components) to the revised manuscript, giving an average total cost of $14-18 for the current 7x7 setup. We also note that this cost scales sub-linearly with grid size, since the majority of the expense lies in the fixed ESP32/multiplexer components rather than the conductive grid material itself, supporting the system's low-cost claim as it is extended to larger sensing surfaces. 
+
+• Figure 6 color coding clarification: 
+       We thank the reviewer for flagging this. We have revised the Figure 6 caption to explicitly state what each color/intensity in the heatmap represents (mean contact duration per grid cell, i.e., Time-on-Task), and added a color bar/legend to the figure itself so the mapping is unambiguous without needing to cross-reference the main text. 
+
+• Figure background and readability (Fig. 3 and others): 
+       We appreciate this feedback. As noted in response to other reviewers, we have regenerated all affected figures, including Fig. 3, in IEEE-compliant format with white backgrounds and improved contrast, replacing the original dashboard screenshots. The raw WPM trace in Fig. 3 is now clearly distinguishable from the smoothed EMA overlay. 
